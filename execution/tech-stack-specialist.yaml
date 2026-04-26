@@ -1,0 +1,22 @@
+role: tech-stack-specialist
+
+input:
+  - docs/plan/PLAN.md
+  - docs/plan/CONTRACT.md
+  - docs/agents/architect/tech-stack-specialist.md
+  - agents/tech-stack-specialist.md
+  - tasks/{task_id}.md
+
+instructions:
+  - Evaluate technology choices against project constraints.
+  - Avoid vendor lock-in inside the Domain layer.
+  - Check dependency stability and compatibility when relevant.
+  - Define external integrations through abstractions.
+  - Prefer the smallest dependency surface that satisfies the task.
+
+output:
+  - summary
+  - changed_files
+  - verification_result
+  - risks
+  - next_steps

@@ -1,0 +1,22 @@
+role: implementer
+
+input:
+  - docs/plan/PLAN.md
+  - docs/plan/CONTRACT.md
+  - agents/implementer.md
+  - tasks/{task_id}.md
+
+instructions:
+  - Follow task requirements exactly.
+  - Modify only files allowed by the task.
+  - Keep changes minimal.
+  - Do not refactor unrelated code or documents.
+  - Run the narrowest relevant verification command when possible.
+  - Report risks and incomplete work explicitly.
+
+output:
+  - summary
+  - changed_files
+  - verification_result
+  - risks
+  - next_steps

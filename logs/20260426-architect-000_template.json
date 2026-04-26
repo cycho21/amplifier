@@ -1,0 +1,26 @@
+﻿{
+    "run_id":  "20260426-architect-000_template",
+    "runner":  "codex-dry-run",
+    "role":  "architect",
+    "task_id":  "000_template",
+    "inputs":  [
+                   "docs/plan/PLAN.md",
+                   "docs/plan/CONTRACT.md",
+                   "agents/architect.md",
+                   "tasks/000_template.md",
+                   "execution/architect.yaml"
+               ],
+    "output":  {
+                   "summary":  "Dry-run prompt generated without invoking an external LLM.",
+                   "changed_files":  [
+
+                                     ],
+                   "verification_result":  "Prompt and structured log were generated locally.",
+                   "risks":  [
+                                 "This run does not verify actual LLM execution."
+                             ],
+                   "next_steps":  [
+                                      "Replace dry-run behavior with a real runner invocation when ready."
+                                  ]
+               }
+}

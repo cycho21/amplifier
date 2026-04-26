@@ -1,0 +1,52 @@
+workflow: parallel-review
+
+description: Parallel dry-run workflow for independent implementation review paths.
+
+mode: parallel
+
+input:
+  - docs/plan/PLAN.md
+  - docs/plan/CONTRACT.md
+  - tasks/{task_id}.md
+
+steps:
+  - id: backend-engineer
+    role: backend-engineer
+    agent_role: agents/backend-engineer.md
+    execution_spec: execution/backend-engineer.yaml
+    task_id: "{task_id}"
+    depends_on: []
+
+  - id: frontend-engineer
+    role: frontend-engineer
+    agent_role: agents/frontend-engineer.md
+    execution_spec: execution/frontend-engineer.yaml
+    task_id: "{task_id}"
+    depends_on: []
+
+  - id: tester
+    role: tester
+    agent_role: agents/tester.md
+    execution_spec: execution/tester.yaml
+    task_id: "{task_id}"
+    depends_on:
+      - backend-engineer
+      - frontend-engineer
+
+  - id: reviewer
+    role: reviewer
+    agent_role: agents/reviewer.md
+    execution_spec: execution/reviewer.yaml
+    task_id: "{task_id}"
+    depends_on:
+      - backend-engineer
+      - frontend-engineer
+
+output:
+  - workflow_summary
+  - step_logs
+  - execution_mode
+  - parallel_groups
+  - final_status
+  - risks
+  - next_steps

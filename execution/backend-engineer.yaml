@@ -1,0 +1,22 @@
+role: backend-engineer
+
+input:
+  - docs/plan/PLAN.md
+  - docs/plan/CONTRACT.md
+  - docs/agents/developer/backend-engineer.md
+  - agents/backend-engineer.md
+  - tasks/{task_id}.md
+
+instructions:
+  - Implement server-side behavior with data integrity and statelessness.
+  - Keep business logic independent from infrastructure.
+  - Separate Domain, Application, and Infrastructure responsibilities.
+  - Validate inputs early and fail with meaningful errors.
+  - Use narrow backend verification commands when possible.
+
+output:
+  - summary
+  - changed_files
+  - verification_result
+  - risks
+  - next_steps

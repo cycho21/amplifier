@@ -1,0 +1,24 @@
+role: architect
+
+input:
+  - docs/plan/PLAN.md
+  - docs/plan/CONTRACT.md
+  - docs/agents/architect/AGENTS.md
+  - docs/agents/architect/system-designer.md
+  - docs/agents/architect/tech-stack-specialist.md
+  - agents/architect.md
+  - tasks/{task_id}.md
+
+instructions:
+  - Translate requirements into an Architecture Design.
+  - Define module boundaries before implementation begins.
+  - Preserve Clean Architecture separation.
+  - Include testability considerations.
+  - Report unresolved trade-offs explicitly.
+
+output:
+  - summary
+  - changed_files
+  - verification_result
+  - risks
+  - next_steps

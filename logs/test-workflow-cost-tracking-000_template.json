@@ -1,0 +1,322 @@
+﻿{
+    "run_id":  "20260426-workflow-implementation-review-000_template",
+    "runner":  "workflow-dry-run",
+    "workflow":  "implementation-review",
+    "task_id":  "000_template",
+    "workflow_spec":  "workflows/implementation-review.yaml",
+    "output":  {
+                   "workflow_summary":  "Sequential workflow dry-run completed.",
+                   "step_logs":  [
+                                     {
+                                         "step_id":  "architect",
+                                         "role":  "architect",
+                                         "task_id":  "000_template",
+                                         "retry_policy":  {
+                                                              "max_attempts":  2,
+                                                              "retry_on":  [
+                                                                               "runner-error"
+                                                                           ],
+                                                              "backoff":  "none"
+                                                          },
+                                         "attempts":  1,
+                                         "cost_tracking":  {
+                                                               "enabled":  true,
+                                                               "currency":  "USD",
+                                                               "unit":  "dry-run-estimate",
+                                                               "estimated_cost":  0
+                                                           },
+                                         "memory":  {
+                                                        "enabled":  true,
+                                                        "scope":  "workflow",
+                                                        "persistence":  "dry-run",
+                                                        "path":  "logs/memory/implementation-review-000_template.json",
+                                                        "loaded":  false,
+                                                        "written":  false
+                                                    },
+                                         "inputs":  [
+                                                        "agents/architect.md",
+                                                        "tasks/000_template.md",
+                                                        "execution/architect.yaml"
+                                                    ],
+                                         "output":  {
+                                                        "summary":  "Dry-run workflow step generated without invoking an external LLM.",
+                                                        "changed_files":  [
+
+                                                                          ],
+                                                        "verification_result":  "Workflow step inputs were loaded locally.",
+                                                        "risks":  [
+                                                                      "This step does not verify actual LLM execution."
+                                                                  ],
+                                                        "next_steps":  [
+                                                                           "Replace dry-run behavior with a real step invocation when ready."
+                                                                       ]
+                                                    }
+                                     },
+                                     {
+                                         "step_id":  "implementer",
+                                         "role":  "implementer",
+                                         "task_id":  "000_template",
+                                         "retry_policy":  {
+                                                              "max_attempts":  2,
+                                                              "retry_on":  [
+                                                                               "runner-error"
+                                                                           ],
+                                                              "backoff":  "none"
+                                                          },
+                                         "attempts":  1,
+                                         "cost_tracking":  {
+                                                               "enabled":  true,
+                                                               "currency":  "USD",
+                                                               "unit":  "dry-run-estimate",
+                                                               "estimated_cost":  0
+                                                           },
+                                         "memory":  {
+                                                        "enabled":  true,
+                                                        "scope":  "workflow",
+                                                        "persistence":  "dry-run",
+                                                        "path":  "logs/memory/implementation-review-000_template.json",
+                                                        "loaded":  false,
+                                                        "written":  false
+                                                    },
+                                         "inputs":  [
+                                                        "agents/implementer.md",
+                                                        "tasks/000_template.md",
+                                                        "execution/implementer.yaml"
+                                                    ],
+                                         "output":  {
+                                                        "summary":  "Dry-run workflow step generated without invoking an external LLM.",
+                                                        "changed_files":  [
+
+                                                                          ],
+                                                        "verification_result":  "Workflow step inputs were loaded locally.",
+                                                        "risks":  [
+                                                                      "This step does not verify actual LLM execution."
+                                                                  ],
+                                                        "next_steps":  [
+                                                                           "Replace dry-run behavior with a real step invocation when ready."
+                                                                       ]
+                                                    }
+                                     },
+                                     {
+                                         "step_id":  "tester",
+                                         "role":  "tester",
+                                         "task_id":  "000_template",
+                                         "retry_policy":  {
+                                                              "max_attempts":  2,
+                                                              "retry_on":  [
+                                                                               "runner-error"
+                                                                           ],
+                                                              "backoff":  "none"
+                                                          },
+                                         "attempts":  1,
+                                         "cost_tracking":  {
+                                                               "enabled":  true,
+                                                               "currency":  "USD",
+                                                               "unit":  "dry-run-estimate",
+                                                               "estimated_cost":  0
+                                                           },
+                                         "memory":  {
+                                                        "enabled":  true,
+                                                        "scope":  "workflow",
+                                                        "persistence":  "dry-run",
+                                                        "path":  "logs/memory/implementation-review-000_template.json",
+                                                        "loaded":  false,
+                                                        "written":  false
+                                                    },
+                                         "inputs":  [
+                                                        "agents/tester.md",
+                                                        "tasks/000_template.md",
+                                                        "execution/tester.yaml"
+                                                    ],
+                                         "output":  {
+                                                        "summary":  "Dry-run workflow step generated without invoking an external LLM.",
+                                                        "changed_files":  [
+
+                                                                          ],
+                                                        "verification_result":  "Workflow step inputs were loaded locally.",
+                                                        "risks":  [
+                                                                      "This step does not verify actual LLM execution."
+                                                                  ],
+                                                        "next_steps":  [
+                                                                           "Replace dry-run behavior with a real step invocation when ready."
+                                                                       ]
+                                                    }
+                                     },
+                                     {
+                                         "step_id":  "reviewer",
+                                         "role":  "reviewer",
+                                         "task_id":  "000_template",
+                                         "retry_policy":  {
+                                                              "max_attempts":  2,
+                                                              "retry_on":  [
+                                                                               "runner-error"
+                                                                           ],
+                                                              "backoff":  "none"
+                                                          },
+                                         "attempts":  1,
+                                         "cost_tracking":  {
+                                                               "enabled":  true,
+                                                               "currency":  "USD",
+                                                               "unit":  "dry-run-estimate",
+                                                               "estimated_cost":  0
+                                                           },
+                                         "memory":  {
+                                                        "enabled":  true,
+                                                        "scope":  "workflow",
+                                                        "persistence":  "dry-run",
+                                                        "path":  "logs/memory/implementation-review-000_template.json",
+                                                        "loaded":  false,
+                                                        "written":  false
+                                                    },
+                                         "inputs":  [
+                                                        "agents/reviewer.md",
+                                                        "tasks/000_template.md",
+                                                        "execution/reviewer.yaml"
+                                                    ],
+                                         "output":  {
+                                                        "summary":  "Dry-run workflow step generated without invoking an external LLM.",
+                                                        "changed_files":  [
+
+                                                                          ],
+                                                        "verification_result":  "Workflow step inputs were loaded locally.",
+                                                        "risks":  [
+                                                                      "This step does not verify actual LLM execution."
+                                                                  ],
+                                                        "next_steps":  [
+                                                                           "Replace dry-run behavior with a real step invocation when ready."
+                                                                       ]
+                                                    }
+                                     }
+                                 ],
+                   "retry_policy":  {
+                                        "max_attempts":  2,
+                                        "retry_on":  [
+                                                         "runner-error"
+                                                     ],
+                                        "backoff":  "none"
+                                    },
+                   "attempts":  1,
+                   "final_status":  "dry-run-complete",
+                   "risks":  [
+                                 "This run does not invoke external LLM tools."
+                             ],
+                   "next_steps":  [
+                                      "Wire workflow steps to concrete runners after the dry-run contract is stable."
+                                  ],
+                   "memory":  {
+                                  "enabled":  true,
+                                  "scope":  "workflow",
+                                  "persistence":  "dry-run",
+                                  "path":  "logs/memory/implementation-review-000_template.json",
+                                  "loaded":  false,
+                                  "written":  false
+                              },
+                   "cost_tracking":  {
+                                         "enabled":  true,
+                                         "currency":  "USD",
+                                         "unit":  "dry-run-estimate",
+                                         "estimated_total_cost":  0,
+                                         "step_costs":  [
+                                                            {
+                                                                "step_id":  "architect",
+                                                                "role":  "architect",
+                                                                "estimated_cost":  0,
+                                                                "currency":  "USD",
+                                                                "unit":  "dry-run-estimate"
+                                                            },
+                                                            {
+                                                                "step_id":  "implementer",
+                                                                "role":  "implementer",
+                                                                "estimated_cost":  0,
+                                                                "currency":  "USD",
+                                                                "unit":  "dry-run-estimate"
+                                                            },
+                                                            {
+                                                                "step_id":  "tester",
+                                                                "role":  "tester",
+                                                                "estimated_cost":  0,
+                                                                "currency":  "USD",
+                                                                "unit":  "dry-run-estimate"
+                                                            },
+                                                            {
+                                                                "step_id":  "reviewer",
+                                                                "role":  "reviewer",
+                                                                "estimated_cost":  0,
+                                                                "currency":  "USD",
+                                                                "unit":  "dry-run-estimate"
+                                                            }
+                                                        ]
+                                     },
+                   "comparison":  {
+                                      "required_fields":  [
+                                                              "summary",
+                                                              "changed_files",
+                                                              "verification_result",
+                                                              "risks",
+                                                              "next_steps"
+                                                          ],
+                                      "required_fields_by_step":  [
+                                                                      {
+                                                                          "step_id":  "architect",
+                                                                          "role":  "architect",
+                                                                          "present_fields":  [
+                                                                                                 "summary",
+                                                                                                 "changed_files",
+                                                                                                 "verification_result",
+                                                                                                 "risks",
+                                                                                                 "next_steps"
+                                                                                             ],
+                                                                          "missing_fields":  [
+
+                                                                                             ]
+                                                                      },
+                                                                      {
+                                                                          "step_id":  "implementer",
+                                                                          "role":  "implementer",
+                                                                          "present_fields":  [
+                                                                                                 "summary",
+                                                                                                 "changed_files",
+                                                                                                 "verification_result",
+                                                                                                 "risks",
+                                                                                                 "next_steps"
+                                                                                             ],
+                                                                          "missing_fields":  [
+
+                                                                                             ]
+                                                                      },
+                                                                      {
+                                                                          "step_id":  "tester",
+                                                                          "role":  "tester",
+                                                                          "present_fields":  [
+                                                                                                 "summary",
+                                                                                                 "changed_files",
+                                                                                                 "verification_result",
+                                                                                                 "risks",
+                                                                                                 "next_steps"
+                                                                                             ],
+                                                                          "missing_fields":  [
+
+                                                                                             ]
+                                                                      },
+                                                                      {
+                                                                          "step_id":  "reviewer",
+                                                                          "role":  "reviewer",
+                                                                          "present_fields":  [
+                                                                                                 "summary",
+                                                                                                 "changed_files",
+                                                                                                 "verification_result",
+                                                                                                 "risks",
+                                                                                                 "next_steps"
+                                                                                             ],
+                                                                          "missing_fields":  [
+
+                                                                                             ]
+                                                                      }
+                                                                  ],
+                                      "missing_required_fields":  [
+
+                                                                  ],
+                                      "status":  "all-required-fields-present"
+                                  }
+               }
+}

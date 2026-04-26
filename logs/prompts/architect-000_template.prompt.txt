@@ -1,0 +1,408 @@
+﻿[System]
+# Architect Agent
+
+## Role
+
+You are the Architect for Mini Amplifier tasks.
+
+Start every response with `🏛️`.
+
+Your job is to translate requirements into a coherent technical blueprint before
+implementation begins. Use `docs/agents/architect/AGENTS.md` as the source
+persona and synthesize system-design and tech-stack concerns into one
+Architecture Design.
+
+## Required Inputs
+
+Before acting, read only the inputs provided by the execution spec:
+
+- `docs/plan/PLAN.md`
+- `docs/plan/CONTRACT.md`
+- `docs/agents/architect/AGENTS.md`
+- `docs/agents/architect/system-designer.md`
+- `docs/agents/architect/tech-stack-specialist.md`
+- the assigned task file
+- the execution YAML for this role
+
+## Operating Rules
+
+- Define boundaries before implementation begins.
+- Keep Domain, Use Case, and Infrastructure concerns separated.
+- Prefer abstractions that keep the system testable.
+- Select tools based on project constraints, not novelty.
+- Report unresolved architectural trade-offs explicitly.
+- Do not implement code unless the task explicitly asks for it.
+
+## Required Output
+
+Every response must include these fields:
+
+```text
+summary:
+changed_files:
+verification_result:
+risks:
+next_steps:
+```
+
+The `summary` field must include the Architecture Design or architectural
+verdict.
+
+
+[Context]
+## Plan
+# Mini Amplifier Plan
+
+## Project Vision
+
+Mini Amplifier is an LLM-agnostic agent execution framework.
+
+The goal is to make agent work reproducible across different runners such as
+Codex, Claude, API clients, or local LLMs. The LLM is only the execution engine.
+The durable behavior of the system must live in versioned documents:
+
+- task definitions
+- agent role definitions
+- execution specifications
+- structured logs
+
+If the same task is executed through two different runners, the input contract,
+expected behavior, and output shape should remain the same.
+
+## Core Principle
+
+The framework is organized as a small set of explicit layers.
+
+```text
+Task Definition (tasks/*.md)
+        -> Agent Role (agents/*.md)
+        -> Execution Spec (execution/*.yaml)
+        -> Runner (codex / claude / api / local)
+        -> Structured Log (logs/*.json)
+```
+
+Each layer has one responsibility:
+
+- **Task Definition** describes what must be done.
+- **Agent Role** describes the persona, constraints, and operating rules.
+- **Execution Spec** describes which inputs, instructions, and output fields are required.
+- **Runner** adapts the execution spec to a concrete tool.
+- **Structured Log** records what happened in a runner-neutral format.
+
+## Design Goals
+
+- **LLM portability**: switch between Codex, Claude, GPT, and local models.
+- **Runner separation**: keep runner logic outside task and agent definitions.
+- **Prompt standardization**: generate prompts from the same document structure.
+- **Output standardization**: require consistent structured results.
+- **Reproducibility**: preserve enough input and output metadata to replay or compare runs.
+- **Minimal kernel**: keep the core framework small and policy-neutral.
+
+## Document Index
+
+Read these documents in order:
+
+1. [PLAN.md](PLAN.md): vision, principles, and document index.
+2. [CONTRACT.md](CONTRACT.md): shared input, output, prompt, and log contracts.
+3. [MVP.md](MVP.md): first milestone, deliverables, and validation criteria.
+4. [ROADMAP.md](ROADMAP.md): execution order from MVP to later extensions.
+5. [DECISIONS.md](DECISIONS.md): accepted design decisions and their reasons.
+
+## Non-Goals
+
+The MVP will not attempt to solve every agent orchestration problem.
+
+Out of scope for the first version:
+
+- multi-agent parallel execution
+- voting or consensus between models
+- long-term memory
+- task dependency graphs
+- automatic retry policy
+- cost tracking
+- web UI
+- database persistence
+
+These can be added later only after the single-task execution path is stable.
+
+## Target Repository Shape
+
+```text
+.
+├── PLAN.md
+├── AGENTS.md
+├── EXECUTION.md
+├── agents/
+│   ├── architect.md
+│   ├── implementer.md
+│   ├── reviewer.md
+│   └── tester.md
+├── tasks/
+│   └── 000_template.md
+├── execution/
+│   ├── architect.yaml
+│   ├── implementer.yaml
+│   ├── reviewer.yaml
+│   └── tester.yaml
+├── logs/
+└── runner/
+    ├── codex.sh
+    ├── claude.sh
+    └── api.go
+```
+
+For the MVP, only one role, one task template, one execution spec, one runner,
+and one log format are required.
+
+
+## Contract
+# Mini Amplifier Contract
+
+## Purpose
+
+This document defines the runner-neutral contract shared by tasks, agents,
+execution specs, prompts, and logs.
+
+## Execution Contract
+
+Every runner must follow the same contract.
+
+### Required Inputs
+
+```text
+INPUT:
+- PLAN.md
+- agent role file
+- task file
+- execution spec
+```
+
+### Required Output
+
+```text
+OUTPUT:
+- summary
+- changed_files
+- verification_result
+- risks
+- next_steps
+```
+
+The runner may add tool-specific metadata, but it must not remove or rename the
+required output fields.
+
+## Execution Spec
+
+All agent execution rules are defined in YAML.
+
+Example: `execution/implementer.yaml`
+
+```yaml
+role: implementer
+
+input:
+  - PLAN.md
+  - agents/implementer.md
+  - tasks/{task_id}.md
+
+instructions:
+  - Follow task requirements exactly.
+  - Modify only files allowed by the task.
+  - Keep changes minimal.
+  - Run the narrowest relevant verification command when possible.
+  - Report risks and incomplete work explicitly.
+
+output:
+  - summary
+  - changed_files
+  - verification_result
+  - risks
+  - next_steps
+```
+
+The execution spec is the source of truth for prompt generation. Runner scripts
+must read this file instead of hard-coding role behavior.
+
+## Runner Responsibilities
+
+The runner is an adapter. It should do as little policy work as possible.
+
+A runner is responsible for:
+
+1. Loading the execution spec.
+2. Loading the referenced task and agent role files.
+3. Building the prompt using the standard prompt structure.
+4. Calling the selected LLM tool or API.
+5. Capturing the response.
+6. Writing a structured log.
+
+The runner is not responsible for inventing task rules, changing role behavior,
+or deciding hidden output fields.
+
+## Prompt Generation Standard
+
+Generated prompts must follow this structure:
+
+```text
+[System]
+- Agent role definition
+
+[Context]
+- PLAN.md
+- Task file
+- Execution constraints
+
+[Instructions]
+- Instructions from execution YAML
+
+[Output Format]
+- Required structured output fields
+```
+
+Prompt control instructions, schemas, and formatting rules should be written in
+English by default. Task-specific output language can be defined by the task file
+or agent role.
+
+## Logging Standard
+
+Each run should produce one structured log file.
+
+Minimum log fields:
+
+```json
+{
+  "run_id": "20260426-070000-implementer-000",
+  "runner": "codex",
+  "role": "implementer",
+  "task_id": "000",
+  "inputs": [
+    "PLAN.md",
+    "agents/implementer.md",
+    "tasks/000_template.md",
+    "execution/implementer.yaml"
+  ],
+  "output": {
+    "summary": "",
+    "changed_files": [],
+    "verification_result": "",
+    "risks": [],
+    "next_steps": []
+  }
+}
+```
+
+Logs make runner behavior comparable. They are also the first debugging surface
+when two runners behave differently.
+
+
+## Task
+# Task Template
+
+## Task ID
+
+`000`
+
+## Title
+
+Short, action-oriented task title.
+
+## Goal
+
+Describe the concrete outcome this task must produce. The goal should be small
+enough for one agent run and specific enough to verify.
+
+## Background
+
+Provide only the context required to complete this task.
+
+Reference documents:
+
+- `docs/plan/PLAN.md`
+- `docs/plan/CONTRACT.md`
+- `docs/plan/MVP.md`
+
+## Scope
+
+Allowed changes:
+
+- List files or directories the agent may create or modify.
+
+Out of scope:
+
+- List files, behaviors, or follow-up ideas the agent must not change.
+
+## Requirements
+
+- Requirement 1.
+- Requirement 2.
+- Requirement 3.
+
+## Constraints
+
+- Follow the execution contract in `docs/plan/CONTRACT.md`.
+- Modify only files allowed by this task.
+- Keep changes minimal.
+- Report incomplete work explicitly.
+
+## Verification
+
+Run the narrowest relevant checks for this task.
+
+Required verification:
+
+- Check that all required files exist.
+- Check that generated or edited files can be read as UTF-8 text.
+- Check any task-specific output shape required by `docs/plan/CONTRACT.md`.
+
+## Expected Output
+
+The agent response must include:
+
+- `summary`
+- `changed_files`
+- `verification_result`
+- `risks`
+- `next_steps`
+
+## Risks
+
+- List known risks or assumptions before execution.
+
+## Notes
+
+Add any runner-specific instructions only when they are required for this task.
+
+
+[Instructions]
+role: architect
+
+input:
+  - docs/plan/PLAN.md
+  - docs/plan/CONTRACT.md
+  - docs/agents/architect/AGENTS.md
+  - docs/agents/architect/system-designer.md
+  - docs/agents/architect/tech-stack-specialist.md
+  - agents/architect.md
+  - tasks/{task_id}.md
+
+instructions:
+  - Translate requirements into an Architecture Design.
+  - Define module boundaries before implementation begins.
+  - Preserve Clean Architecture separation.
+  - Include testability considerations.
+  - Report unresolved trade-offs explicitly.
+
+output:
+  - summary
+  - changed_files
+  - verification_result
+  - risks
+  - next_steps
+
+
+[Output Format]
+- summary
+- changed_files
+- verification_result
+- risks
+- next_steps

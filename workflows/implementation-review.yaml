@@ -1,0 +1,66 @@
+workflow: implementation-review
+
+description: Sequential workflow for designing, implementing, testing, and reviewing a task.
+
+mode: sequential
+
+retry:
+  max_attempts: 2
+  retry_on:
+    - runner-error
+  backoff: none
+
+cost_tracking:
+  enabled: true
+  currency: USD
+  unit: dry-run-estimate
+
+memory:
+  enabled: true
+  scope: workflow
+  persistence: dry-run
+  path: logs/memory/{workflow}-{task_id}.json
+
+input:
+  - docs/plan/PLAN.md
+  - docs/plan/CONTRACT.md
+  - tasks/{task_id}.md
+
+steps:
+  - id: architect
+    role: architect
+    agent_role: agents/architect.md
+    execution_spec: execution/architect.yaml
+    task_id: "{task_id}"
+    depends_on: []
+
+  - id: implementer
+    role: implementer
+    agent_role: agents/implementer.md
+    execution_spec: execution/implementer.yaml
+    task_id: "{task_id}"
+    depends_on:
+      - architect
+
+  - id: tester
+    role: tester
+    agent_role: agents/tester.md
+    execution_spec: execution/tester.yaml
+    task_id: "{task_id}"
+    depends_on:
+      - implementer
+
+  - id: reviewer
+    role: reviewer
+    agent_role: agents/reviewer.md
+    execution_spec: execution/reviewer.yaml
+    task_id: "{task_id}"
+    depends_on:
+      - tester
+
+output:
+  - workflow_summary
+  - step_logs
+  - final_status
+  - risks
+  - next_steps

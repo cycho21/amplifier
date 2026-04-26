@@ -1,0 +1,23 @@
+role: tester
+
+input:
+  - docs/plan/PLAN.md
+  - docs/plan/CONTRACT.md
+  - docs/agents/developer/tester.md
+  - agents/tester.md
+  - tasks/{task_id}.md
+
+instructions:
+  - Validate only the behavior requested by the task.
+  - Prefer the narrowest relevant verification command.
+  - Check meaningful edge cases when relevant.
+  - Report pass/fail status for each scenario.
+  - Provide fix suggestions for failed checks.
+  - Do not modify production code unless explicitly instructed.
+
+output:
+  - summary
+  - changed_files
+  - verification_result
+  - risks
+  - next_steps

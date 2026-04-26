@@ -1,0 +1,22 @@
+role: frontend-engineer
+
+input:
+  - docs/plan/PLAN.md
+  - docs/plan/CONTRACT.md
+  - docs/agents/developer/front-engineer.md
+  - agents/frontend-engineer.md
+  - tasks/{task_id}.md
+
+instructions:
+  - Implement UI behavior with reusable components and predictable state.
+  - Keep UI components logic-light.
+  - Separate API fetching logic from view rendering.
+  - Preserve keyboard accessibility and graceful error handling.
+  - Use narrow UI or interaction verification when possible.
+
+output:
+  - summary
+  - changed_files
+  - verification_result
+  - risks
+  - next_steps

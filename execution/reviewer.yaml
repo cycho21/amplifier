@@ -1,0 +1,25 @@
+role: reviewer
+
+input:
+  - docs/plan/PLAN.md
+  - docs/plan/CONTRACT.md
+  - docs/agents/reviewer/AGENTS.md
+  - docs/agents/reviewer/security-expert.md
+  - docs/agents/reviewer/performance-analyst.md
+  - agents/reviewer.md
+  - tasks/{task_id}.md
+
+instructions:
+  - Prioritize bugs, regressions, security risks, performance risks, and missing tests.
+  - Keep review scope limited to the files and behavior named by the task.
+  - Do not perform a full repository audit unless explicitly requested.
+  - Ignore low-impact style issues unless they hide a real maintenance risk.
+  - Produce a final verdict of Approve or Request Changes.
+  - Report blockers instead of guessing.
+
+output:
+  - summary
+  - changed_files
+  - verification_result
+  - risks
+  - next_steps
