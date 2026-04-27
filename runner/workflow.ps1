@@ -1,10 +1,17 @@
 param(
     [string]$TaskId = "000_template",
     [string]$WorkflowSpec = "workflows/implementation-review.yaml",
-    [string]$LogOut = "logs/20260426-workflow-implementation-review-000_template.json"
+    [string]$LogOut = "logs/20260426-workflow-implementation-review-000_template.json",
+    [switch]$RealExecution = $false
 )
 
 $ErrorActionPreference = "Stop"
+
+# Load libraries
+. (Join-Path $PSScriptRoot "lib/retry-policy.ps1")
+. (Join-Path $PSScriptRoot "lib/cost-calculator.ps1")
+. (Join-Path $PSScriptRoot "lib/memory-manager.ps1")
+. (Join-Path $PSScriptRoot "lib/parallel-executor.ps1")
 
 function Read-Utf8File {
     param([string]$Path)
@@ -278,13 +285,19 @@ function Read-MemoryPolicy {
 }
 
 function New-StepCostTracking {
-    param($CostTrackingPolicy)
+    param(
+        $CostTrackingPolicy,
+        $ProviderMetadata = @{}
+    )
+
+    # Calculate cost from provider metadata
+    $estimatedCost = Get-StepCost -ProviderMetadata $ProviderMetadata -Currency $CostTrackingPolicy.currency
 
     return [ordered]@{
         enabled = $CostTrackingPolicy.enabled
         currency = $CostTrackingPolicy.currency
         unit = $CostTrackingPolicy.unit
-        estimated_cost = 0
+        estimated_cost = $estimatedCost
     }
 }
 
@@ -324,13 +337,22 @@ function New-StepLog {
         $MemoryPolicy
     )
 
-    # Read provider from execution spec
-    $provider = Read-ProviderFromExecutionSpec -ExecutionSpecPath $Step.execution_spec
+    # Read provider from step or execution spec
+    $provider = if ($Step.PSObject.Properties.Name -contains "provider") {
+        $Step.provider
+    } elseif ($Step.PSObject.Properties.Name -contains "execution_spec") {
+        Read-ProviderFromExecutionSpec -ExecutionSpecPath $Step.execution_spec
+    } else {
+        "dry-run"  # Default provider
+    }
+
+    # Initialize attempt count
+    $actualAttempts = 1
 
     # Route to appropriate runner based on provider
     $output = switch ($provider) {
         "dry-run" {
-            # Preserve existing dry-run behavior
+            # Preserve existing dry-run behavior (no retry for dry-run)
             [ordered]@{
                 summary = "Dry-run workflow step generated without invoking an external LLM."
                 changed_files = @()
@@ -340,16 +362,35 @@ function New-StepLog {
             }
         }
         "codex" {
-            # Invoke codex.ps1 runner
-            Invoke-CodexRunner -Step $Step
+            # Invoke codex.ps1 runner with retry wrapper
+            $retryResult = Invoke-WithRetryPolicy -Action {
+                param($Attempt)
+                Invoke-CodexRunner -Step $Step
+            } -RetryPolicy $RetryPolicy -StepId $Step.id
+
+            $actualAttempts = $retryResult.attempts
+            $retryResult.result
         }
         "claude" {
-            # Invoke claude.ps1 runner
-            Invoke-ClaudeRunner -Step $Step
+            # Invoke claude.ps1 runner with retry wrapper
+            $retryResult = Invoke-WithRetryPolicy -Action {
+                param($Attempt)
+                Invoke-ClaudeRunner -Step $Step
+            } -RetryPolicy $RetryPolicy -StepId $Step.id
+
+            $actualAttempts = $retryResult.attempts
+            $retryResult.result
         }
         default {
             throw "Unsupported provider: $provider. Expected: dry-run, codex, or claude"
         }
+    }
+
+    # Extract provider metadata from output for cost calculation
+    $providerMetadata = if ($output.Keys -contains "provider_metadata") {
+        $output.provider_metadata
+    } else {
+        @{}
     }
 
     return [ordered]@{
@@ -358,8 +399,8 @@ function New-StepLog {
         task_id = $Step.task_id
         provider = $provider
         retry_policy = $RetryPolicy
-        attempts = 1
-        cost_tracking = New-StepCostTracking $CostTrackingPolicy
+        attempts = $actualAttempts
+        cost_tracking = New-StepCostTracking -CostTrackingPolicy $CostTrackingPolicy -ProviderMetadata $providerMetadata
         memory = New-StepMemory $MemoryPolicy
         inputs = @(
             $Step.agent_role,
@@ -441,8 +482,14 @@ function Invoke-SequentialDryRun {
         $Steps,
         $RetryPolicy,
         $CostTrackingPolicy,
-        $MemoryPolicy
+        $MemoryPolicy,
+        $WorkflowName,
+        $TaskId
     )
+
+    # Load memory if enabled
+    $memoryState = Read-Memory -MemoryPolicy $MemoryPolicy -WorkflowName $WorkflowName -TaskId $TaskId
+    $memoryLoaded = $memoryState.loaded
 
     $completed = @{}
     $stepLogs = @()
@@ -459,12 +506,17 @@ function Invoke-SequentialDryRun {
         $completed[$step.id] = $true
     }
 
+    # Write memory if enabled
+    $memoryWritten = Write-Memory -MemoryPolicy $MemoryPolicy -MemoryData $memoryState.data -WorkflowName $WorkflowName -TaskId $TaskId
+
     return [ordered]@{
         workflow_summary = "Sequential workflow dry-run completed."
         step_logs = $stepLogs
         retry_policy = $RetryPolicy
         attempts = 1
         final_status = "dry-run-complete"
+        memory_loaded = $memoryLoaded
+        memory_written = $memoryWritten
         risks = @("This run does not invoke external LLM tools.")
         next_steps = @("Wire workflow steps to concrete runners after the dry-run contract is stable.")
     }
@@ -475,8 +527,67 @@ function Invoke-ParallelDryRun {
         $Steps,
         $RetryPolicy,
         $CostTrackingPolicy,
-        $MemoryPolicy
+        $MemoryPolicy,
+        $WorkflowName,
+        $TaskId,
+        [switch]$RealExecution = $false
     )
+
+    # If real execution requested, use parallel executor
+    if ($RealExecution) {
+        Write-Verbose "Real parallel execution mode enabled"
+
+        # Load memory if enabled
+        $memoryState = Read-Memory -MemoryPolicy $MemoryPolicy -WorkflowName $WorkflowName -TaskId $TaskId
+        $memoryLoaded = $memoryState.loaded
+
+        # Create cancellation token
+        $token = New-CancellationToken
+
+        # Execute in parallel
+        $result = Invoke-ParallelExecution -Steps $Steps `
+            -RetryPolicy $RetryPolicy `
+            -CostTrackingPolicy $CostTrackingPolicy `
+            -MemoryPolicy $MemoryPolicy `
+            -Token $token `
+            -WorkflowName $WorkflowName `
+            -TaskId $TaskId
+
+        # Write memory if enabled
+        $memoryWritten = Write-Memory -MemoryPolicy $MemoryPolicy -MemoryData $memoryState.data -WorkflowName $WorkflowName -TaskId $TaskId
+
+        # Determine final status
+        $finalStatus = "completed"
+        foreach ($stepId in $result.step_statuses.Keys) {
+            $state = $result.step_statuses[$stepId].state
+            if ($state -eq "Failed") {
+                $finalStatus = "failed"
+                break
+            } elseif ($state -eq "Cancelled") {
+                $finalStatus = "cancelled"
+                break
+            }
+        }
+
+        return [ordered]@{
+            workflow_summary = "Parallel workflow execution completed."
+            step_logs = $result.step_logs
+            step_statuses = $result.step_statuses
+            execution_mode = "parallel-real"
+            retry_policy = $RetryPolicy
+            attempts = 1
+            final_status = $finalStatus
+            memory_loaded = $memoryLoaded
+            memory_written = $memoryWritten
+        }
+    }
+
+    # Otherwise, do dry-run (original behavior)
+    Write-Verbose "Dry-run parallel execution mode"
+
+    # Load memory if enabled
+    $memoryState = Read-Memory -MemoryPolicy $MemoryPolicy -WorkflowName $WorkflowName -TaskId $TaskId
+    $memoryLoaded = $memoryState.loaded
 
     $remaining = @($Steps)
     $completed = @{}
@@ -528,6 +639,9 @@ function Invoke-ParallelDryRun {
         $groupIndex++
     }
 
+    # Write memory if enabled
+    $memoryWritten = Write-Memory -MemoryPolicy $MemoryPolicy -MemoryData $memoryState.data -WorkflowName $WorkflowName -TaskId $TaskId
+
     return [ordered]@{
         workflow_summary = "Parallel workflow dry-run completed."
         step_logs = $stepLogs
@@ -536,21 +650,27 @@ function Invoke-ParallelDryRun {
         retry_policy = $RetryPolicy
         attempts = 1
         final_status = "dry-run-complete"
+        memory_loaded = $memoryLoaded
+        memory_written = $memoryWritten
         risks = @("This run does not invoke external LLM tools or launch concurrent processes.")
         next_steps = @("Replace dry-run grouping with real parallel runner execution when ready.")
     }
 }
 
 function New-WorkflowMemory {
-    param($MemoryPolicy)
+    param(
+        $MemoryPolicy,
+        [bool]$Loaded = $false,
+        [bool]$Written = $false
+    )
 
     return [ordered]@{
         enabled = $MemoryPolicy.enabled
         scope = $MemoryPolicy.scope
         persistence = $MemoryPolicy.persistence
         path = $MemoryPolicy.path
-        loaded = $false
-        written = $false
+        loaded = $Loaded
+        written = $Written
     }
 }
 
@@ -563,20 +683,30 @@ function New-WorkflowCostTracking {
     $stepCosts = @()
 
     foreach ($stepLog in $StepLogs) {
+        # Extract cost from step log cost_tracking field
+        $stepCost = if ($stepLog.cost_tracking.Keys -contains "estimated_cost") {
+            $stepLog.cost_tracking.estimated_cost
+        } else {
+            0
+        }
+
         $stepCosts += [ordered]@{
             step_id = $stepLog.step_id
             role = $stepLog.role
-            estimated_cost = 0
+            estimated_cost = $stepCost
             currency = $CostTrackingPolicy.currency
             unit = $CostTrackingPolicy.unit
         }
     }
 
+    # Calculate total cost
+    $totalCost = Get-WorkflowTotalCost -StepCosts $stepCosts
+
     return [ordered]@{
         enabled = $CostTrackingPolicy.enabled
         currency = $CostTrackingPolicy.currency
         unit = $CostTrackingPolicy.unit
-        estimated_total_cost = 0
+        estimated_total_cost = $totalCost
         step_costs = $stepCosts
     }
 }
@@ -632,6 +762,8 @@ function New-WorkflowComparison {
     }
 }
 
+# Only run main execution if script is executed directly (not dot-sourced)
+if ($MyInvocation.InvocationName -ne '.') {
 $workflowText = Read-Utf8File $WorkflowSpec
 $workflowLines = $workflowText -split "\r?\n"
 $workflowName = Get-ScalarValue $workflowLines "workflow"
@@ -667,14 +799,18 @@ Show-DependencyGraph -Steps $steps
 Show-ValidationResult -Validation $validation
 
 if ($mode -eq "sequential") {
-    $output = Invoke-SequentialDryRun $steps $retryPolicy $costTrackingPolicy $memoryPolicy
+    $output = Invoke-SequentialDryRun $steps $retryPolicy $costTrackingPolicy $memoryPolicy $workflowName $TaskId
 } elseif ($mode -eq "parallel") {
-    $output = Invoke-ParallelDryRun $steps $retryPolicy $costTrackingPolicy $memoryPolicy
+    $output = Invoke-ParallelDryRun $steps $retryPolicy $costTrackingPolicy $memoryPolicy $workflowName $TaskId -RealExecution:$RealExecution
 } else {
     throw "Unsupported workflow mode: $mode"
 }
 
-$output.memory = New-WorkflowMemory $memoryPolicy
+# Extract memory loaded/written flags from execution output
+$memoryLoaded = if ($output.Keys -contains "memory_loaded") { $output.memory_loaded } else { $false }
+$memoryWritten = if ($output.Keys -contains "memory_written") { $output.memory_written } else { $false }
+
+$output.memory = New-WorkflowMemory -MemoryPolicy $memoryPolicy -Loaded $memoryLoaded -Written $memoryWritten
 $output.cost_tracking = New-WorkflowCostTracking $costTrackingPolicy $output.step_logs
 $output.comparison = New-WorkflowComparison $output.step_logs
 
@@ -700,3 +836,5 @@ $log = [ordered]@{
 $log | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 -Path $LogOut
 
 Write-Output "Workflow log written to $LogOut"
+
+} # End of main execution block
