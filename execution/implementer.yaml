@@ -1,5 +1,20 @@
 role: implementer
 
+# Provider selection: dry-run | codex | claude
+# Defaults to dry-run if not specified
+provider: dry-run
+
+# Provider-specific configuration
+provider_config:
+  codex:
+    model: "gpt-4"  # OpenAI models: gpt-4, gpt-3.5-turbo, codex-mini-latest, gpt-5.5
+    timeout: 600
+    max_tokens: 8000
+  claude:
+    model: "claude-sonnet-4-5"
+    timeout: 600
+    max_tokens: 8000
+
 input:
   - docs/plan/PLAN.md
   - docs/plan/CONTRACT.md

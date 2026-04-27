@@ -1,0 +1,7 @@
+workflow: invalid-empty
+
+description: Test fixture for empty workflow (no steps)
+
+mode: sequential
+
+steps: []

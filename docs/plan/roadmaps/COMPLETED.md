@@ -47,6 +47,22 @@ contracts, specs, runners, workflows, and logs without invoking external LLMs.
 - [x] Add cost tracking.
 - [x] Add persistent memory only after task execution is stable.
 
+## Phase 6: Real Runner Invocation (Completed 2026-04-27)
+
+- [x] Define real runner invocation contract (SPEC.md).
+- [x] Add provider field to execution specs (codex | claude | dry-run).
+- [x] Create shared utility library (`runner/lib/common.ps1`).
+- [x] Create output parser with retry logic (`runner/lib/output-parser.ps1`).
+- [x] Implement real Codex runner with OpenAI API (`runner/codex.ps1`).
+- [x] Implement real Claude CLI runner (`runner/claude.ps1`).
+- [x] Add provider routing to workflow orchestrator (`runner/workflow.ps1`).
+- [x] Preserve dry-run mode as testable fallback.
+- [x] Add contract compliance test suite.
+- [x] Support configurable model selection per provider.
+- [x] Add timeout handling via Start-Job.
+- [x] Add JSON parsing with markdown fence stripping.
+- [x] Add retry logic for malformed LLM output (max 3 attempts).
+
 ## Completed Deliverables
 
 - Product agent role files in `agents/`.
@@ -57,12 +73,24 @@ contracts, specs, runners, workflows, and logs without invoking external LLMs.
 - Focused PowerShell tests for workflow, parallel, comparison, retry, cost, and memory behavior.
 - Agent governance files separated into `agent-governance/`.
 
+## Completed Deliverables
+
+- Product agent role files in `agents/`.
+- Execution specs in `execution/`.
+- Workflow specs in `workflows/`.
+- Contract index and focused contracts in `docs/plan/contracts/`.
+- Dry-run workflow runner in `runner/workflow.ps1`.
+- Real runner implementations: `runner/codex.ps1` (OpenAI API), `runner/claude.ps1` (Claude CLI).
+- Shared utility libraries: `runner/lib/common.ps1`, `runner/lib/output-parser.ps1`.
+- Contract compliance test suite in `tests/integration/`.
+- Focused PowerShell tests for workflow, parallel, comparison, retry, cost, and memory behavior.
+- Agent governance files separated into `agent-governance/`.
+
 ## Explicitly Not Completed
 
-- Real external LLM invocation.
-- Real concurrent process execution.
+- Real concurrent process execution (parallel workflows).
 - Real retry after runtime failure.
-- Real provider cost calculation.
+- Real provider cost calculation with actual API usage.
 - Real persistent memory read/write.
 - Quality voting or winner selection.
 - Dependency graph scheduling beyond current dry-run grouping.

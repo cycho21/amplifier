@@ -1,0 +1,27 @@
+role: test-implementer
+
+provider: codex
+
+provider_config:
+  codex:
+    model: "gpt-4"
+    timeout: 120
+    max_tokens: 2000
+
+input:
+  - docs/plan/PLAN.md
+  - docs/plan/CONTRACT.md
+  - agents/implementer.md
+  - tasks/{task_id}.md
+
+instructions:
+  - This is a minimal test execution.
+  - Return a valid JSON response with all required fields.
+  - Keep the response short for testing purposes.
+
+output:
+  - summary
+  - changed_files
+  - verification_result
+  - risks
+  - next_steps

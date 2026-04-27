@@ -1,0 +1,14 @@
+workflow: invalid-self-dep
+
+description: Test fixture for self-dependency (step depends on itself)
+
+mode: sequential
+
+steps:
+  - id: tester
+    role: tester
+    agent_role: agents/tester.md
+    execution_spec: execution/tester.yaml
+    task_id: "000_template"
+    depends_on:
+      - tester

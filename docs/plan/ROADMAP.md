@@ -35,7 +35,7 @@ Read in this order:
 ## High-Level Progress
 
 - [x] Dry-run kernel roadmap.
-- [ ] Real runner roadmap.
+- [x] Real runner roadmap (Completed 2026-04-27).
 - [ ] Orchestration roadmap.
 - [ ] Operations roadmap.
 

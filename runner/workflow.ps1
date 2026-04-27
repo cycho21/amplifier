@@ -301,6 +301,21 @@ function New-StepMemory {
     }
 }
 
+function Read-ProviderFromExecutionSpec {
+    param([string]$ExecutionSpecPath)
+
+    $text = Read-Utf8File $ExecutionSpecPath
+    $lines = $text -split "\r?\n"
+
+    foreach ($line in $lines) {
+        if ($line -match "^provider:\s*(.+)$") {
+            return $Matches[1].Trim().Trim('"')
+        }
+    }
+
+    return "dry-run"  # Default provider
+}
+
 function New-StepLog {
     param(
         $Step,
@@ -309,10 +324,39 @@ function New-StepLog {
         $MemoryPolicy
     )
 
+    # Read provider from execution spec
+    $provider = Read-ProviderFromExecutionSpec -ExecutionSpecPath $Step.execution_spec
+
+    # Route to appropriate runner based on provider
+    $output = switch ($provider) {
+        "dry-run" {
+            # Preserve existing dry-run behavior
+            [ordered]@{
+                summary = "Dry-run workflow step generated without invoking an external LLM."
+                changed_files = @()
+                verification_result = "Workflow step inputs were loaded locally."
+                risks = @("This step does not verify actual LLM execution.")
+                next_steps = @("Replace dry-run behavior with a real step invocation when ready.")
+            }
+        }
+        "codex" {
+            # Invoke codex.ps1 runner
+            Invoke-CodexRunner -Step $Step
+        }
+        "claude" {
+            # Invoke claude.ps1 runner
+            Invoke-ClaudeRunner -Step $Step
+        }
+        default {
+            throw "Unsupported provider: $provider. Expected: dry-run, codex, or claude"
+        }
+    }
+
     return [ordered]@{
         step_id = $Step.id
         role = $Step.role
         task_id = $Step.task_id
+        provider = $provider
         retry_policy = $RetryPolicy
         attempts = 1
         cost_tracking = New-StepCostTracking $CostTrackingPolicy
@@ -322,12 +366,64 @@ function New-StepLog {
             "tasks/$($Step.task_id).md",
             $Step.execution_spec
         )
-        output = [ordered]@{
-            summary = "Dry-run workflow step generated without invoking an external LLM."
-            changed_files = @()
-            verification_result = "Workflow step inputs were loaded locally."
-            risks = @("This step does not verify actual LLM execution.")
-            next_steps = @("Replace dry-run behavior with a real step invocation when ready.")
+        output = $output
+    }
+}
+
+function Invoke-CodexRunner {
+    param($Step)
+
+    Write-Verbose "Invoking Codex runner for step $($Step.id)"
+
+    $runnerScript = Join-Path $PSScriptRoot "codex.ps1"
+    $tempLogPath = [System.IO.Path]::GetTempFileName()
+
+    try {
+        # Execute codex.ps1
+        & $runnerScript `
+            -TaskId $Step.task_id `
+            -Role $Step.role `
+            -ExecutionSpec $Step.execution_spec `
+            -AgentRole $Step.agent_role `
+            -LogOut $tempLogPath
+
+        # Read runner output log
+        $runnerLog = Get-Content -Path $tempLogPath -Raw | ConvertFrom-Json
+
+        # Extract output (with provider_metadata if present)
+        return $runnerLog.output
+    } finally {
+        if (Test-Path $tempLogPath) {
+            Remove-Item $tempLogPath -Force
+        }
+    }
+}
+
+function Invoke-ClaudeRunner {
+    param($Step)
+
+    Write-Verbose "Invoking Claude CLI runner for step $($Step.id)"
+
+    $runnerScript = Join-Path $PSScriptRoot "claude.ps1"
+    $tempLogPath = [System.IO.Path]::GetTempFileName()
+
+    try {
+        # Execute claude.ps1
+        & $runnerScript `
+            -TaskId $Step.task_id `
+            -Role $Step.role `
+            -ExecutionSpec $Step.execution_spec `
+            -AgentRole $Step.agent_role `
+            -LogOut $tempLogPath
+
+        # Read runner output log
+        $runnerLog = Get-Content -Path $tempLogPath -Raw | ConvertFrom-Json
+
+        # Extract output (with provider_metadata if present)
+        return $runnerLog.output
+    } finally {
+        if (Test-Path $tempLogPath) {
+            Remove-Item $tempLogPath -Force
         }
     }
 }
@@ -546,6 +642,30 @@ $memoryPolicy = Read-MemoryPolicy $workflowLines $workflowName $TaskId
 
 $steps = Read-WorkflowSteps $workflowLines $TaskId
 
+# Validate workflow dependencies before execution
+. (Join-Path $PSScriptRoot "lib/workflow-validator.ps1")
+. (Join-Path $PSScriptRoot "lib/workflow-visualizer.ps1")
+
+Write-Host ""
+Write-Host "Validating workflow: " -NoNewline -ForegroundColor Cyan
+Write-Host $workflowName -ForegroundColor White
+$validation = Test-WorkflowDependencies -Steps $steps
+
+if (-not $validation.valid) {
+    Write-Host ""
+    Write-Host "Workflow validation failed:" -ForegroundColor Red
+    Write-Host ""
+    foreach ($error in $validation.errors) {
+        Write-Host "  ✗ $($error.message)" -ForegroundColor Red
+    }
+    Write-Host ""
+    throw "Workflow validation failed. See errors above."
+}
+
+# Display dependency graph and validation result
+Show-DependencyGraph -Steps $steps
+Show-ValidationResult -Validation $validation
+
 if ($mode -eq "sequential") {
     $output = Invoke-SequentialDryRun $steps $retryPolicy $costTrackingPolicy $memoryPolicy
 } elseif ($mode -eq "parallel") {
@@ -557,6 +677,13 @@ if ($mode -eq "sequential") {
 $output.memory = New-WorkflowMemory $memoryPolicy
 $output.cost_tracking = New-WorkflowCostTracking $costTrackingPolicy $output.step_logs
 $output.comparison = New-WorkflowComparison $output.step_logs
+
+# Display completion summary
+Write-Host ""
+Write-Host "Workflow completed successfully" -ForegroundColor Green
+Write-Host "  Steps: $($steps.Count)" -ForegroundColor DarkGray
+Write-Host "  Mode: $mode" -ForegroundColor DarkGray
+Write-Host ""
 
 $logDir = Split-Path -Parent $LogOut
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
