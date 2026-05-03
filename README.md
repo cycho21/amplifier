@@ -156,18 +156,18 @@ launch real concurrent processes yet.
 Run individual tests with Windows PowerShell:
 
 ```powershell
-.\test_workflow_runner.ps1
-.\test_parallel_workflow_runner.ps1
-.\test_workflow_graph_validation.ps1
-.\test_runner_invocation_contract.ps1
-.\test_execution_runner_selection.ps1
-.\test_execution_input_paths.ps1
-.\test_codex_runner_invocation_boundary.ps1
-.\test_codex_runner_structured_output.ps1
-.\test_workflow_comparison.ps1
-.\test_workflow_retry_policy.ps1
-.\test_workflow_cost_tracking.ps1
-.\test_workflow_memory_policy.ps1
+.\tests\test_workflow_runner.ps1
+.\tests\test_parallel_workflow_runner.ps1
+.\tests\test_workflow_graph_validation.ps1
+.\tests\test_runner_invocation_contract.ps1
+.\tests\test_execution_runner_selection.ps1
+.\tests\test_execution_input_paths.ps1
+.\tests\test_codex_runner_invocation_boundary.ps1
+.\tests\test_codex_runner_structured_output.ps1
+.\tests\test_workflow_comparison.ps1
+.\tests\test_workflow_retry_policy.ps1
+.\tests\test_workflow_cost_tracking.ps1
+.\tests\test_workflow_memory_policy.ps1
 ```
 
 The Codex boundary tests use local fake Codex fixtures and do not call the real

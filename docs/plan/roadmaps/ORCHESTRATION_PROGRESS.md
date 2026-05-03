@@ -17,6 +17,6 @@ Scope:
 
 Verification plan:
 
-- Passed: `.\test_workflow_graph_validation.ps1`.
-- Passed: `.\test_workflow_runner.ps1`.
-- Passed: `.\test_parallel_workflow_runner.ps1`.
+- Passed: `.\tests\test_workflow_graph_validation.ps1`.
+- Passed: `.\tests\test_workflow_runner.ps1`.
+- Passed: `.\tests\test_parallel_workflow_runner.ps1`.
