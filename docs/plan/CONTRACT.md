@@ -36,6 +36,9 @@ Read these contracts by concern:
    dry-run memory reporting requirements.
 8. [Logging Contract](contracts/logging.md): structured log fields and
    comparability requirements.
+9. [Runner Invocation Contract](contracts/runner-invocation.md): dry-run and
+   real invocation modes, explicit real-run enabling, required output
+   preservation, and malformed-output failure behavior.
 
 ## Extension Policy
 
