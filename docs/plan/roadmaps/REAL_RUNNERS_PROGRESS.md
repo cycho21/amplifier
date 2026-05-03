@@ -67,3 +67,19 @@ Scope:
 Verification:
 
 - Passed: `.\test_codex_runner_invocation_boundary.ps1`.
+
+## 2026-05-03: Structured Codex Output Capture
+
+Status: completed.
+
+Scope:
+
+- Instruct Codex real runs to return JSON with required output fields.
+- Parse valid raw Codex final responses from `--output-last-message`.
+- Copy parsed `summary`, `changed_files`, `verification_result`, `risks`, and `next_steps` into the structured log.
+- Record whether real output parsing succeeded.
+- Leave strict malformed-output failure fixtures for the next step.
+
+Verification:
+
+- Passed: `.\test_codex_runner_structured_output.ps1`.

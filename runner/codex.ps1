@@ -125,6 +125,50 @@ function Invoke-RealCodex {
     }
 }
 
+function ConvertTo-StringArray {
+    param($Value)
+
+    if ($null -eq $Value) {
+        return @()
+    }
+
+    if ($Value -is [array]) {
+        return @($Value | ForEach-Object { [string]$_ })
+    }
+
+    return @([string]$Value)
+}
+
+function Read-StructuredCodexOutput {
+    param([string]$RawOutputPath)
+
+    if (-not (Test-Path $RawOutputPath)) {
+        return $null
+    }
+
+    $rawOutput = Get-Content -Encoding utf8 $RawOutputPath -Raw
+
+    try {
+        $parsed = $rawOutput | ConvertFrom-Json
+    } catch {
+        return $null
+    }
+
+    foreach ($field in @("summary", "changed_files", "verification_result", "risks", "next_steps")) {
+        if (-not ($parsed.PSObject.Properties.Name -contains $field)) {
+            return $null
+        }
+    }
+
+    return [ordered]@{
+        summary = [string]$parsed.summary
+        changed_files = ConvertTo-StringArray $parsed.changed_files
+        verification_result = [string]$parsed.verification_result
+        risks = ConvertTo-StringArray $parsed.risks
+        next_steps = ConvertTo-StringArray $parsed.next_steps
+    }
+}
+
 $taskPath = "tasks/$TaskId.md"
 
 $planText = Read-Utf8File $Plan
@@ -164,11 +208,14 @@ $taskText
 $executionText
 
 [Output Format]
-- summary
-- changed_files
-- verification_result
-- risks
-- next_steps
+Return a JSON object with exactly these fields:
+{
+  "summary": "string",
+  "changed_files": ["path"],
+  "verification_result": "string",
+  "risks": ["string"],
+  "next_steps": ["string"]
+}
 "@
 
 $promptDir = Split-Path -Parent $PromptOut
@@ -186,6 +233,7 @@ $invocation = [ordered]@{
     command = $CodexCommand
     exit_code = $null
     raw_output = ""
+    parsed_output = $false
 }
 $output = [ordered]@{
     summary = "Dry-run prompt generated without invoking an external LLM."
@@ -208,10 +256,17 @@ if ($effectiveMode -eq "real") {
         $output.risks = @("The real Codex invocation did not complete successfully.")
         $output.next_steps = @("Inspect Codex CLI output and retry after resolving the runner failure.")
     } else {
-        $output.summary = "Real Codex invocation completed behind the runner adapter boundary."
-        $output.verification_result = "Codex CLI exited with code 0 and wrote raw output to $RawOutputOut."
-        $output.risks = @("Raw Codex output is not parsed into task-specific structured fields yet.")
-        $output.next_steps = @("Implement structured Codex output parsing in the next real-runner step.")
+        $structuredOutput = Read-StructuredCodexOutput $RawOutputOut
+
+        if ($null -ne $structuredOutput) {
+            $output = $structuredOutput
+            $invocation.parsed_output = $true
+        } else {
+            $output.summary = "Real Codex invocation completed behind the runner adapter boundary."
+            $output.verification_result = "Codex CLI exited with code 0 and wrote raw output to $RawOutputOut."
+            $output.risks = @("Raw Codex output was not parseable as the required structured fields.")
+            $output.next_steps = @("Add malformed output fixtures and strict failure handling in the next real-runner step.")
+        }
     }
 }
 

@@ -10,8 +10,29 @@ function Assert-RequiredOutputFields {
     }
 }
 
+function Remove-TestOutput {
+    param([string[]]$Paths)
+
+    foreach ($path in $Paths) {
+        if (Test-Path $path) {
+            Remove-Item -LiteralPath $path -Recurse -Force
+        }
+    }
+}
+
 $dryRunLogOut = "logs/test-codex-boundary-dry-run-000_template.json"
 $dryRunPromptOut = "logs/prompts/test-codex-boundary-dry-run.prompt.txt"
+$realLogOut = "logs/test-codex-boundary-real-000_template.json"
+$realPromptOut = "logs/prompts/test-codex-boundary-real.prompt.txt"
+$rawOutputOut = "logs/raw/test-codex-boundary-real-output.txt"
+
+Remove-TestOutput @(
+    $dryRunLogOut,
+    $dryRunPromptOut,
+    $realLogOut,
+    $realPromptOut,
+    $rawOutputOut
+)
 
 & .\runner\codex.ps1 `
     -TaskId "000_template" `
@@ -86,10 +107,6 @@ if (-not $blockedFailed) {
     throw "Expected real mode without AllowReal to fail"
 }
 
-$realLogOut = "logs/test-codex-boundary-real-000_template.json"
-$realPromptOut = "logs/prompts/test-codex-boundary-real.prompt.txt"
-$rawOutputOut = "logs/raw/test-codex-boundary-real-output.txt"
-
 & .\runner\codex.ps1 `
     -TaskId "000_template" `
     -Role "implementer" `
@@ -125,5 +142,13 @@ if (-not (Test-Path $rawOutputOut)) {
 }
 
 Assert-RequiredOutputFields $realLog.output
+
+Remove-TestOutput @(
+    $dryRunLogOut,
+    $dryRunPromptOut,
+    $realLogOut,
+    $realPromptOut,
+    $rawOutputOut
+)
 
 Write-Output "Codex runner invocation boundary test passed."

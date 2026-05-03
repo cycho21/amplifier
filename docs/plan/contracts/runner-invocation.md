@@ -60,7 +60,11 @@ The Codex adapter invokes `codex exec` only in real mode with explicit real-run
 permission. Boundary metadata must record the configured runner selection,
 effective invocation mode, command name, exit code, and raw output path.
 
-Structured parsing of the raw model response is a separate step.
+When the raw Codex final response is valid JSON with the required output fields,
+the adapter must copy those values into the structured runner log.
+
+Malformed-output failure fixtures and strict failure behavior are a separate
+step.
 
 ## Out Of Scope
 
