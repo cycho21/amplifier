@@ -1,5 +1,10 @@
 role: architect
 
+runner:
+  provider: codex
+  tool: codex-cli
+  mode: dry-run
+
 input:
   - docs/plan/PLAN.md
   - docs/plan/CONTRACT.md

@@ -37,6 +37,11 @@ Example: `execution/implementer.yaml`
 ```yaml
 role: implementer
 
+runner:
+  provider: codex
+  tool: codex-cli
+  mode: dry-run
+
 input:
   - PLAN.md
   - agents/implementer.md
@@ -59,6 +64,24 @@ output:
 
 The execution spec is the source of truth for prompt generation. Runner scripts
 must read this file instead of hard-coding role behavior.
+
+## Runner Selection
+
+Execution specs define runner selection separately from role behavior:
+
+```yaml
+runner:
+  provider: codex
+  tool: codex-cli
+  mode: dry-run
+```
+
+Codex is the only supported provider until the Codex runner path is complete.
+Other providers must be added only after the Codex path preserves the required
+log shape in both dry-run and real modes.
+
+`mode: dry-run` is the default deterministic local test mode. `mode: real` must
+be set explicitly before a runner may invoke an external tool.
 
 ## Runner Responsibilities
 
