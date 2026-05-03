@@ -13,7 +13,7 @@ In progress.
 
 1. [x] Define real runner invocation contract.
 2. [x] Add provider/tool selection to execution specs without hard-coding role behavior.
-3. [ ] Implement real Codex runner invocation behind the existing runner adapter boundary.
+3. [x] Implement real Codex runner invocation behind the existing runner adapter boundary.
 4. [ ] Capture real model output into the required structured fields.
 5. [ ] Preserve dry-run mode as a testable fallback.
 6. [ ] Add failure fixtures for malformed model output.

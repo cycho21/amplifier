@@ -1,0 +1,22 @@
+role: implementer
+
+runner:
+  provider: claude
+  tool: codex-cli
+  mode: dry-run
+
+input:
+  - docs/plan/PLAN.md
+  - docs/plan/CONTRACT.md
+  - agents/implementer.md
+  - tasks/{task_id}.md
+
+instructions:
+  - Follow task requirements exactly.
+
+output:
+  - summary
+  - changed_files
+  - verification_result
+  - risks
+  - next_steps

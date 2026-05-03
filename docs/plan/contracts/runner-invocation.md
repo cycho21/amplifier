@@ -22,6 +22,8 @@ boundary.
 
 Real invocation must be explicitly enabled. A runner must not call an external
 tool because of a default value, missing field, or ambiguous configuration.
+For the Codex adapter, real mode requires an explicit `-AllowReal` invocation
+flag in addition to selecting `mode: real`.
 
 Dry-run mode must remain deterministic so local tests can run without network,
 credentials, model access, or external CLI state.
@@ -51,6 +53,14 @@ tool response.
 Failure logs must preserve enough metadata to diagnose the adapter failure
 without pretending the task succeeded. The exact malformed-output fixtures and
 parser behavior are defined in a later implementation step.
+
+## Codex Invocation Boundary
+
+The Codex adapter invokes `codex exec` only in real mode with explicit real-run
+permission. Boundary metadata must record the configured runner selection,
+effective invocation mode, command name, exit code, and raw output path.
+
+Structured parsing of the raw model response is a separate step.
 
 ## Out Of Scope
 

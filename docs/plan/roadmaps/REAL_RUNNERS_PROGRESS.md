@@ -50,3 +50,20 @@ Scope:
 Verification:
 
 - Passed: `.\test_execution_input_paths.ps1`.
+
+## 2026-05-03: Codex Invocation Boundary
+
+Status: completed.
+
+Scope:
+
+- Make `runner/codex.ps1` read `provider`, `tool`, and `mode` from the execution spec.
+- Keep dry-run as the default and avoid external calls unless real mode is explicit.
+- Require `-AllowReal` before invoking `codex exec`.
+- Add invocation metadata for configured mode, effective mode, command, exit code, and raw output path.
+- Preserve required output fields in dry-run and real boundary logs.
+- Leave structured model output parsing for the next real-runner step.
+
+Verification:
+
+- Passed: `.\test_codex_runner_invocation_boundary.ps1`.
