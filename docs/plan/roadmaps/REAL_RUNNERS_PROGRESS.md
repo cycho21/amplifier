@@ -35,3 +35,18 @@ Scope:
 Verification:
 
 - Passed: `.\test_execution_runner_selection.ps1`.
+
+## 2026-05-03: Execution Input Path Validation
+
+Status: completed.
+
+Scope:
+
+- Remove stale `docs/agents` references from product execution specs.
+- Keep product role definitions self-contained.
+- Require execution spec input paths to resolve to existing product files.
+- Preserve the boundary that `agent-governance/` is not product runtime input.
+
+Verification:
+
+- Passed: `.\test_execution_input_paths.ps1`.

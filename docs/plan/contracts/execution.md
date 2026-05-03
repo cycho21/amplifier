@@ -65,6 +65,10 @@ output:
 The execution spec is the source of truth for prompt generation. Runner scripts
 must read this file instead of hard-coding role behavior.
 
+Every path listed under `input` must resolve to an existing product file after
+replacing `{task_id}`. Execution specs must not reference agent governance files
+or removed source-persona paths.
+
 ## Runner Selection
 
 Execution specs define runner selection separately from role behavior:

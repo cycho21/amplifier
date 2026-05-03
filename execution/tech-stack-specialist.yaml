@@ -8,7 +8,6 @@ runner:
 input:
   - docs/plan/PLAN.md
   - docs/plan/CONTRACT.md
-  - docs/agents/architect/tech-stack-specialist.md
   - agents/tech-stack-specialist.md
   - tasks/{task_id}.md
 
