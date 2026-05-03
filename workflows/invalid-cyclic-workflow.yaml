@@ -1,0 +1,42 @@
+workflow: invalid-cyclic-workflow
+
+description: Invalid workflow fixture with a dependency cycle.
+
+mode: parallel
+
+input:
+  - tasks/{task_id}.md
+
+steps:
+  - id: architect
+    role: architect
+    agent_role: agents/architect.md
+    execution_spec: execution/architect.yaml
+    task_id: "{task_id}"
+    depends_on:
+      - reviewer
+
+  - id: implementer
+    role: implementer
+    agent_role: agents/implementer.md
+    execution_spec: execution/implementer.yaml
+    task_id: "{task_id}"
+    depends_on:
+      - architect
+
+  - id: reviewer
+    role: reviewer
+    agent_role: agents/reviewer.md
+    execution_spec: execution/reviewer.yaml
+    task_id: "{task_id}"
+    depends_on:
+      - implementer
+
+output:
+  - workflow_summary
+  - step_logs
+  - execution_mode
+  - parallel_groups
+  - final_status
+  - risks
+  - next_steps

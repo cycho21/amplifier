@@ -1,0 +1,24 @@
+workflow: invalid-self-dependency-workflow
+
+description: Invalid workflow fixture with a step that depends on itself.
+
+mode: sequential
+
+input:
+  - tasks/{task_id}.md
+
+steps:
+  - id: implementer
+    role: implementer
+    agent_role: agents/implementer.md
+    execution_spec: execution/implementer.yaml
+    task_id: "{task_id}"
+    depends_on:
+      - implementer
+
+output:
+  - workflow_summary
+  - step_logs
+  - final_status
+  - risks
+  - next_steps

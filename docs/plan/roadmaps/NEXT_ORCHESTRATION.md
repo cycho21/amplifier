@@ -6,12 +6,12 @@ Move from dry-run workflow grouping to real orchestration behavior.
 
 ## Status
 
-Not started.
+In progress.
 
 ## Sequence
 
-1. [ ] Define dependency graph validation for workflow specs.
-2. [ ] Detect cycles before execution.
+1. [x] Define dependency graph validation for workflow specs.
+2. [x] Detect cycles before execution.
 3. [ ] Execute independent steps concurrently in real parallel mode.
 4. [ ] Preserve deterministic dry-run grouping for tests.
 5. [ ] Add cancellation and failure propagation rules.

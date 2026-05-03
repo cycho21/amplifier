@@ -340,6 +340,65 @@ function Test-StepInputs {
     }
 }
 
+function Invoke-WorkflowGraphVisit {
+    param(
+        [string]$StepId,
+        [hashtable]$StepById,
+        [hashtable]$VisitState,
+        [string[]]$Path
+    )
+
+    if ($VisitState.ContainsKey($StepId)) {
+        if ($VisitState[$StepId] -eq "visiting") {
+            $cyclePath = @($Path + $StepId) -join " -> "
+            throw "Workflow dependency graph contains a cycle: $cyclePath"
+        }
+
+        return
+    }
+
+    $VisitState[$StepId] = "visiting"
+    $step = $StepById[$StepId]
+
+    foreach ($dependency in $step.depends_on) {
+        Invoke-WorkflowGraphVisit $dependency $StepById $VisitState @($Path + $StepId)
+    }
+
+    $VisitState[$StepId] = "visited"
+}
+
+function Test-WorkflowGraph {
+    param($Steps)
+
+    $stepById = @{}
+
+    foreach ($step in $Steps) {
+        if ($stepById.ContainsKey($step.id)) {
+            throw "Duplicate workflow step id: $($step.id)"
+        }
+
+        $stepById[$step.id] = $step
+    }
+
+    foreach ($step in $Steps) {
+        foreach ($dependency in $step.depends_on) {
+            if ($dependency -eq $step.id) {
+                throw "Step '$($step.id)' depends on itself"
+            }
+
+            if (-not $stepById.ContainsKey($dependency)) {
+                throw "Step '$($step.id)' depends on unknown step '$dependency'"
+            }
+        }
+    }
+
+    $visitState = @{}
+
+    foreach ($step in $Steps) {
+        Invoke-WorkflowGraphVisit $step.id $stepById $visitState @()
+    }
+}
+
 function Invoke-SequentialDryRun {
     param(
         $Steps,
@@ -545,6 +604,7 @@ $costTrackingPolicy = Read-CostTrackingPolicy $workflowLines
 $memoryPolicy = Read-MemoryPolicy $workflowLines $workflowName $TaskId
 
 $steps = Read-WorkflowSteps $workflowLines $TaskId
+Test-WorkflowGraph $steps
 
 if ($mode -eq "sequential") {
     $output = Invoke-SequentialDryRun $steps $retryPolicy $costTrackingPolicy $memoryPolicy
