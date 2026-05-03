@@ -25,13 +25,19 @@ $dryRunPromptOut = "logs/prompts/test-codex-boundary-dry-run.prompt.txt"
 $realLogOut = "logs/test-codex-boundary-real-000_template.json"
 $realPromptOut = "logs/prompts/test-codex-boundary-real.prompt.txt"
 $rawOutputOut = "logs/raw/test-codex-boundary-real-output.txt"
+$fallbackLogOut = "logs/test-codex-boundary-fallback-000_template.json"
+$fallbackPromptOut = "logs/prompts/test-codex-boundary-fallback.prompt.txt"
+$fallbackRawOutputOut = "logs/raw/test-codex-boundary-fallback-output.txt"
 
 Remove-TestOutput @(
     $dryRunLogOut,
     $dryRunPromptOut,
     $realLogOut,
     $realPromptOut,
-    $rawOutputOut
+    $rawOutputOut,
+    $fallbackLogOut,
+    $fallbackPromptOut,
+    $fallbackRawOutputOut
 )
 
 & .\runner\codex.ps1 `
@@ -110,6 +116,50 @@ if (-not $blockedFailed) {
 & .\runner\codex.ps1 `
     -TaskId "000_template" `
     -Role "implementer" `
+    -ExecutionSpec "test-fixtures/execution/real-runner-codex.yaml" `
+    -AgentRole "agents/implementer.md" `
+    -Mode "dry-run" `
+    -AllowReal `
+    -CodexCommand ".\test-fixtures\fail-if-invoked-codex.ps1" `
+    -PromptOut $fallbackPromptOut `
+    -LogOut $fallbackLogOut `
+    -RawOutputOut $fallbackRawOutputOut
+
+$fallbackLog = Get-Content -Encoding utf8 $fallbackLogOut -Raw | ConvertFrom-Json
+
+if ($fallbackLog.runner -ne "codex-dry-run") {
+    throw "Expected codex-dry-run fallback runner, got $($fallbackLog.runner)"
+}
+
+if ($fallbackLog.runner_selection.configured_mode -ne "real") {
+    throw "Expected fallback configured mode real"
+}
+
+if ($fallbackLog.runner_selection.effective_mode -ne "dry-run") {
+    throw "Expected fallback effective mode dry-run"
+}
+
+if ($fallbackLog.invocation.mode -ne "dry-run") {
+    throw "Expected fallback invocation mode dry-run"
+}
+
+if ($fallbackLog.invocation.real_enabled -ne $false) {
+    throw "Dry-run fallback must not enable real execution"
+}
+
+if ($null -ne $fallbackLog.invocation.exit_code) {
+    throw "Dry-run fallback must not record a real invocation exit code"
+}
+
+if (Test-Path $fallbackRawOutputOut) {
+    throw "Dry-run fallback must not invoke Codex or write raw output"
+}
+
+Assert-RequiredOutputFields $fallbackLog.output
+
+& .\runner\codex.ps1 `
+    -TaskId "000_template" `
+    -Role "implementer" `
     -ExecutionSpec "execution/implementer.yaml" `
     -AgentRole "agents/implementer.md" `
     -Mode "real" `
@@ -148,7 +198,10 @@ Remove-TestOutput @(
     $dryRunPromptOut,
     $realLogOut,
     $realPromptOut,
-    $rawOutputOut
+    $rawOutputOut,
+    $fallbackLogOut,
+    $fallbackPromptOut,
+    $fallbackRawOutputOut
 )
 
 Write-Output "Codex runner invocation boundary test passed."

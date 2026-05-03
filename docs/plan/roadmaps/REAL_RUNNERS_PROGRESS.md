@@ -18,7 +18,7 @@ Scope:
 
 Verification:
 
-- Passed: `.\test_runner_invocation_contract.ps1`.
+- Passed: `.\tests\test_runner_invocation_contract.ps1`.
 
 ## 2026-05-03: Provider/Tool Selection
 
@@ -34,7 +34,7 @@ Scope:
 
 Verification:
 
-- Passed: `.\test_execution_runner_selection.ps1`.
+- Passed: `.\tests\test_execution_runner_selection.ps1`.
 
 ## 2026-05-03: Execution Input Path Validation
 
@@ -49,7 +49,7 @@ Scope:
 
 Verification:
 
-- Passed: `.\test_execution_input_paths.ps1`.
+- Passed: `.\tests\test_execution_input_paths.ps1`.
 
 ## 2026-05-03: Codex Invocation Boundary
 
@@ -66,7 +66,7 @@ Scope:
 
 Verification:
 
-- Passed: `.\test_codex_runner_invocation_boundary.ps1`.
+- Passed: `.\tests\test_codex_runner_invocation_boundary.ps1`.
 
 ## 2026-05-03: Structured Codex Output Capture
 
@@ -82,4 +82,19 @@ Scope:
 
 Verification:
 
-- Passed: `.\test_codex_runner_structured_output.ps1`.
+- Passed: `.\tests\test_codex_runner_structured_output.ps1`.
+
+## 2026-05-03: Dry-Run Fallback Coverage
+
+Status: completed.
+
+Scope:
+
+- Add a real-mode Codex execution fixture for fallback tests.
+- Prove `-Mode dry-run` overrides a real-mode execution spec.
+- Prove dry-run fallback does not invoke the configured Codex command or write raw output.
+- Preserve required structured output fields in fallback logs.
+
+Verification:
+
+- Passed: `.\tests\test_codex_runner_invocation_boundary.ps1`.

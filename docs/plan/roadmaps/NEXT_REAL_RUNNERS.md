@@ -15,7 +15,7 @@ In progress.
 2. [x] Add provider/tool selection to execution specs without hard-coding role behavior.
 3. [x] Implement real Codex runner invocation behind the existing runner adapter boundary.
 4. [x] Capture real model output into the required structured fields.
-5. [ ] Preserve dry-run mode as a testable fallback.
+5. [x] Preserve dry-run mode as a testable fallback.
 6. [ ] Add failure fixtures for malformed model output.
 7. [ ] Add tests that prove real-run logs remain compatible with dry-run logs.
 
