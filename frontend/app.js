@@ -1,13 +1,18 @@
 import { summarizeRuns } from './logParser.mjs';
+import { summarizeRoadmaps } from './roadmapParser.mjs';
 
 const fileInput = document.querySelector('#log-files');
+const roadmapInput = document.querySelector('#roadmap-files');
 const runList = document.querySelector('#run-list');
 const errorList = document.querySelector('#error-list');
+const roadmapList = document.querySelector('#roadmap-list');
+const roadmapErrorList = document.querySelector('#roadmap-error-list');
 const inspector = document.querySelector('#inspector');
 const inspectorEmpty = document.querySelector('#inspector-empty');
 const runCount = document.querySelector('#run-count');
 const errorCount = document.querySelector('#error-count');
 const stepCount = document.querySelector('#step-count');
+const roadmapCount = document.querySelector('#roadmap-count');
 
 let currentRuns = [];
 
@@ -25,7 +30,7 @@ fileInput.addEventListener('change', async (event) => {
   const summary = summarizeRuns(fileContents);
   currentRuns = summary.runs;
   renderSummary(summary);
-  renderRunList(summary.runs);
+  renderRunList(summary.runs, summary.emptyMessage);
   renderErrors(summary.errors);
 
   if (summary.runs.length > 0) {
@@ -33,6 +38,23 @@ fileInput.addEventListener('change', async (event) => {
   } else {
     clearInspector();
   }
+});
+
+roadmapInput.addEventListener('change', async (event) => {
+  const files = Array.from(event.target.files || []).filter((file) =>
+    file.name.toLowerCase().endsWith('.md')
+  );
+  const fileContents = await Promise.all(
+    files.map(async (file) => ({
+      name: file.webkitRelativePath || file.name,
+      content: await file.text()
+    }))
+  );
+
+  const summary = summarizeRoadmaps(fileContents);
+  roadmapCount.textContent = String(summary.roadmaps.length);
+  renderRoadmaps(summary.roadmaps, summary.emptyMessage);
+  renderRoadmapErrors(summary.errors);
 });
 
 function renderSummary(summary) {
@@ -43,13 +65,13 @@ function renderSummary(summary) {
   );
 }
 
-function renderRunList(runs) {
+function renderRunList(runs, emptyMessage = 'No logs loaded.') {
   runList.replaceChildren();
   runList.classList.toggle('empty', runs.length === 0);
 
   if (runs.length === 0) {
     const empty = document.createElement('p');
-    empty.textContent = 'No logs loaded.';
+    empty.textContent = emptyMessage;
     runList.append(empty);
     return;
   }
@@ -96,6 +118,81 @@ function renderErrors(errors) {
   }
 }
 
+function renderRoadmaps(roadmaps, emptyMessage = 'No roadmaps loaded.') {
+  roadmapList.replaceChildren();
+  roadmapList.classList.toggle('empty', roadmaps.length === 0);
+
+  if (roadmaps.length === 0) {
+    const empty = document.createElement('p');
+    empty.textContent = emptyMessage;
+    roadmapList.append(empty);
+    return;
+  }
+
+  for (const roadmap of roadmaps) {
+    roadmapList.append(renderRoadmapCard(roadmap));
+  }
+}
+
+function renderRoadmapErrors(errors) {
+  roadmapErrorList.replaceChildren();
+
+  for (const error of errors) {
+    const item = document.createElement('div');
+    item.className = 'error-item';
+    const title = document.createElement('strong');
+    title.textContent = error.fileName;
+    const detail = document.createElement('span');
+    detail.textContent = error.error;
+    item.append(title, detail);
+    roadmapErrorList.append(item);
+  }
+}
+
+function renderRoadmapCard(roadmap) {
+  const card = document.createElement('article');
+  card.className = 'roadmap-card';
+
+  const header = document.createElement('header');
+  header.className = 'roadmap-card-header';
+  const titleGroup = document.createElement('div');
+  const title = document.createElement('h3');
+  title.textContent = roadmap.title;
+  const file = document.createElement('p');
+  file.className = 'muted compact-line';
+  file.textContent = roadmap.fileName;
+  titleGroup.append(title, file);
+
+  const status = document.createElement('span');
+  status.className = 'status-badge';
+  status.textContent = roadmap.status;
+  header.append(titleGroup, status);
+
+  const progress = document.createElement('progress');
+  progress.max = roadmap.totalCount;
+  progress.value = roadmap.completedCount;
+  progress.setAttribute(
+    'aria-label',
+    `${roadmap.completedCount} of ${roadmap.totalCount} roadmap items complete`
+  );
+
+  const progressText = document.createElement('p');
+  progressText.className = 'muted compact-line';
+  progressText.textContent = `${roadmap.completedCount}/${roadmap.totalCount} complete`;
+
+  const list = document.createElement('ul');
+  list.className = 'roadmap-items';
+  for (const item of roadmap.items) {
+    const row = document.createElement('li');
+    row.className = item.done ? 'done' : '';
+    row.textContent = item.text;
+    list.append(row);
+  }
+
+  card.append(header, progress, progressText, list);
+  return card;
+}
+
 function selectRun(index) {
   const run = currentRuns[index];
   if (!run) {
@@ -115,6 +212,7 @@ function selectRun(index) {
     renderOperationalState(run),
     renderCostTracking(run),
     renderMemoryState(run),
+    renderVerificationPanel(run),
     renderTextList('Risks', run.risks),
     renderTextList('Next steps', run.nextSteps),
     renderSteps(run.steps)
@@ -238,6 +336,51 @@ function renderMemoryState(run) {
   grid.append(renderMemorySummary(run.memory), renderStepMemory(run.steps));
   section.append(heading, grid);
   return section;
+}
+
+function renderVerificationPanel(run) {
+  const section = document.createElement('section');
+  section.className = 'detail-section';
+  const heading = document.createElement('h3');
+  heading.textContent = 'Local verification';
+  const panel = document.createElement('div');
+  panel.className = 'verification-panel';
+
+  if (run.verificationEvidence.length === 0) {
+    panel.append(renderMutedLine('No verification evidence in this captured log.'));
+  }
+
+  for (const evidence of run.verificationEvidence) {
+    panel.append(renderVerificationEvidence(evidence));
+  }
+
+  section.append(heading, panel);
+  return section;
+}
+
+function renderVerificationEvidence(evidence) {
+  const item = document.createElement('article');
+  item.className = evidence.exitCode === 0 ? 'verification-item passed' : 'verification-item';
+
+  const header = document.createElement('div');
+  header.className = 'verification-header';
+  const title = document.createElement('strong');
+  title.textContent = `${evidence.scope} / ${evidence.label}`;
+  const badge = document.createElement('span');
+  badge.className = evidence.exitCode === 0 ? 'verification-badge passed' : 'verification-badge';
+  badge.textContent = evidence.exitCode === null ? 'recorded' : `exit ${evidence.exitCode}`;
+  header.append(title, badge);
+
+  const command = document.createElement('p');
+  command.className = 'muted compact-line';
+  command.textContent = `Command: ${evidence.command || 'not captured'}`;
+
+  const result = document.createElement('p');
+  result.className = 'verification-result';
+  result.textContent = evidence.result;
+
+  item.append(header, command, result);
+  return item;
 }
 
 function renderMemorySummary(memory) {

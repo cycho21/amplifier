@@ -15,6 +15,7 @@ export function parseLogFile(fileName, content) {
   const stepLogs = Array.isArray(output.step_logs) ? output.step_logs : [];
   const isWorkflow = Boolean(data.workflow || stepLogs.length > 0);
   const cost = normalizeWorkflowCost(output.cost_tracking);
+  const steps = stepLogs.map(normalizeStep);
 
   return {
     ok: true,
@@ -30,8 +31,9 @@ export function parseLogFile(fileName, content) {
         : stringOrFallback(data.role, data.run_id || fileName),
       status: stringOrFallback(output.final_status, isWorkflow ? 'unknown' : 'complete'),
       stepCount: stepLogs.length,
-      steps: stepLogs.map(normalizeStep),
+      steps,
       verificationResult: stringOrFallback(output.verification_result, ''),
+      verificationEvidence: normalizeVerificationEvidence(data, output, steps),
       risks: arrayOfStrings(output.risks),
       nextSteps: arrayOfStrings(output.next_steps),
       retryAttempts: arrayOfObjects(output.retry_attempts).map(normalizeRetryAttempt),
@@ -44,6 +46,37 @@ export function parseLogFile(fileName, content) {
       memory: normalizeMemory(output.memory)
     }
   };
+}
+
+function normalizeVerificationEvidence(data, output, steps) {
+  const evidence = [];
+  const workflowResult = stringOrFallback(output.verification_result, '');
+
+  if (workflowResult) {
+    evidence.push({
+      scope: 'workflow',
+      label: stringOrFallback(data.workflow, stringOrFallback(data.role, data.run_id || 'workflow')),
+      command: isObject(data.invocation) ? stringOrFallback(data.invocation.command, '') : '',
+      exitCode: isObject(data.invocation) ? numberOrNull(data.invocation.exit_code) : null,
+      result: workflowResult
+    });
+  }
+
+  for (const step of steps) {
+    if (!step.verificationResult) {
+      continue;
+    }
+
+    evidence.push({
+      scope: 'step',
+      label: step.stepId,
+      command: '',
+      exitCode: null,
+      result: step.verificationResult
+    });
+  }
+
+  return evidence;
 }
 
 export function summarizeRuns(files) {
@@ -62,7 +95,8 @@ export function summarizeRuns(files) {
 
   return {
     runs,
-    errors
+    errors,
+    emptyMessage: 'No logs loaded.'
   };
 }
 

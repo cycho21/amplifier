@@ -13,11 +13,18 @@
           <p class="eyebrow">Mini Amplifier</p>
           <h1>Operator</h1>
         </div>
-        <label class="open-button" for="log-files" title="Open workflow log JSON files">
-          <span aria-hidden="true">+</span>
-          <span>Open logs</span>
-        </label>
+        <div class="toolbar-actions">
+          <label class="open-button" for="log-files" title="Open workflow log JSON files">
+            <span aria-hidden="true">+</span>
+            <span>Open logs</span>
+          </label>
+          <label class="open-button secondary" for="roadmap-files" title="Open roadmap markdown files">
+            <span aria-hidden="true">+</span>
+            <span>Open roadmaps</span>
+          </label>
+        </div>
         <input id="log-files" type="file" accept=".json,application/json" multiple webkitdirectory>
+        <input id="roadmap-files" type="file" accept=".md,text/markdown,text/plain" multiple webkitdirectory>
       </header>
 
       <section class="summary-strip" aria-label="Run summary">
@@ -32,6 +39,10 @@
         <div>
           <span class="metric" id="step-count">0</span>
           <span class="metric-label">steps</span>
+        </div>
+        <div>
+          <span class="metric" id="roadmap-count">0</span>
+          <span class="metric-label">roadmaps</span>
         </div>
       </section>
 
@@ -52,6 +63,16 @@
           </div>
           <article id="inspector" class="inspector-body" hidden></article>
         </section>
+      </section>
+
+      <section class="roadmap-dashboard" aria-label="Roadmap dashboard">
+        <div class="panel-heading">
+          <h2>Roadmaps</h2>
+        </div>
+        <div id="roadmap-list" class="roadmap-list empty">
+          <p>No roadmaps loaded.</p>
+        </div>
+        <div id="roadmap-error-list" class="error-list" aria-live="polite"></div>
       </section>
     </main>
 

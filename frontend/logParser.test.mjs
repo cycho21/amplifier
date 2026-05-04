@@ -98,6 +98,14 @@ test('summarizeRuns keeps parsed runs and malformed files separate', () => {
   assert.equal(summary.runs[0].name, 'implementer');
 });
 
+test('summarizeRuns reports an empty state when no log files are loaded', () => {
+  const summary = summarizeRuns([]);
+
+  assert.equal(summary.runs.length, 0);
+  assert.equal(summary.errors.length, 0);
+  assert.equal(summary.emptyMessage, 'No logs loaded.');
+});
+
 test('parseLogFile normalizes retry exhaustion, cancelled steps, and skipped steps', () => {
   const content = JSON.stringify({
     run_id: '20260426-workflow-real-failed-000_template',
@@ -337,4 +345,54 @@ test('parseLogFile normalizes workflow and step memory state', () => {
     stale: true,
     overwriteAllowed: false
   });
+});
+
+test('parseLogFile collects verification evidence from captured logs', () => {
+  const content = JSON.stringify({
+    run_id: '20260426-workflow-implementation-review-000_template',
+    runner: 'workflow-dry-run',
+    workflow: 'implementation-review',
+    task_id: '000_template',
+    output: {
+      final_status: 'dry-run-complete',
+      verification_result: 'Workflow verification completed.',
+      step_logs: [
+        {
+          step_id: 'tester',
+          role: 'tester',
+          output: {
+            verification_result: 'PowerShell tests passed.',
+            risks: [],
+            next_steps: []
+          }
+        }
+      ],
+      risks: [],
+      next_steps: []
+    },
+    invocation: {
+      command: '.\\runner\\workflow.ps1',
+      exit_code: 0
+    }
+  });
+
+  const result = parseLogFile('verification-workflow.json', content);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.run.verificationEvidence, [
+    {
+      scope: 'workflow',
+      label: 'implementation-review',
+      command: '.\\runner\\workflow.ps1',
+      exitCode: 0,
+      result: 'Workflow verification completed.'
+    },
+    {
+      scope: 'step',
+      label: 'tester',
+      command: '',
+      exitCode: null,
+      result: 'PowerShell tests passed.'
+    }
+  ]);
 });

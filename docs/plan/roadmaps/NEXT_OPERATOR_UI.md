@@ -25,9 +25,9 @@ In progress.
 4. [x] Render retry attempts, retry exhaustion, cancelled steps, and skipped steps.
 5. [x] Render cost tracking totals and per-step provider metadata.
 6. [x] Render memory loaded/written/stale/overwrite state.
-7. [ ] Add a read-only roadmap dashboard from `docs/plan/roadmaps/`.
-8. [ ] Add a local verification panel that can display test command results from a captured log file.
-9. [ ] Add tests for log parsing, empty states, malformed logs, and roadmap parsing.
+7. [x] Add a read-only roadmap dashboard from `docs/plan/roadmaps/`.
+8. [x] Add a local verification panel that can display test command results from a captured log file.
+9. [x] Add tests for log parsing, empty states, malformed logs, and roadmap parsing.
 
 ## Acceptance Criteria
 
