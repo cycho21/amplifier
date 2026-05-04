@@ -1,4 +1,4 @@
-# Next Roadmap: Operator UI
+# Roadmap: Operator UI
 
 ## Goal
 
@@ -7,7 +7,7 @@ verification status without changing runner behavior.
 
 ## Status
 
-In progress.
+Completed.
 
 ## Principles
 
