@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mini Amplifier Operator</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Mini Amplifier</p>
+          <h1>Operator</h1>
+        </div>
+        <label class="open-button" for="log-files" title="Open workflow log JSON files">
+          <span aria-hidden="true">+</span>
+          <span>Open logs</span>
+        </label>
+        <input id="log-files" type="file" accept=".json,application/json" multiple webkitdirectory>
+      </header>
+
+      <section class="summary-strip" aria-label="Run summary">
+        <div>
+          <span class="metric" id="run-count">0</span>
+          <span class="metric-label">runs</span>
+        </div>
+        <div>
+          <span class="metric" id="error-count">0</span>
+          <span class="metric-label">errors</span>
+        </div>
+        <div>
+          <span class="metric" id="step-count">0</span>
+          <span class="metric-label">steps</span>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <aside class="run-list-panel" aria-label="Workflow logs">
+          <div class="panel-heading">
+            <h2>Runs</h2>
+          </div>
+          <div id="run-list" class="run-list empty">
+            <p>No logs loaded.</p>
+          </div>
+          <div id="error-list" class="error-list" aria-live="polite"></div>
+        </aside>
+
+        <section class="inspector" aria-label="Run inspector">
+          <div id="inspector-empty" class="empty-state">
+            <p>No run selected.</p>
+          </div>
+          <article id="inspector" class="inspector-body" hidden></article>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

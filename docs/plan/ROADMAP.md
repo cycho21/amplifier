@@ -5,8 +5,8 @@ future work area.
 
 ## Current Status
 
-The original dry-run based Mini Amplifier roadmap and the first real runner
-roadmap are complete.
+The dry-run based Mini Amplifier roadmap, real runner roadmap, orchestration
+roadmap, and operations roadmap are complete.
 
 Completed work includes:
 
@@ -19,10 +19,12 @@ Completed work includes:
 - Real Codex runner invocation behind the runner adapter boundary.
 - Structured real Codex output capture, malformed-output failure handling, and
   dry-run/real-run log compatibility coverage.
+- Real parallel orchestration, voting gate readiness, retry behavior, cost
+  metadata, cost totals, persistent memory, and memory safety rules.
 
-The project now has a stable dry-run kernel, runner-neutral contracts, a real
-Codex runner path, and real parallel orchestration behavior. Operations
-behavior remains future roadmap work.
+The project now has a stable runner and workflow core. The next roadmap is a
+read-only local operator UI for inspecting logs, operational state, and roadmap
+status.
 
 ## Roadmap Files
 
@@ -34,15 +36,18 @@ Read in this order:
    runner invocation roadmap.
 3. [Orchestration](roadmaps/NEXT_ORCHESTRATION.md): completed real dependency
    graph, concurrency, failure propagation, and voting gate roadmap.
-4. [Next: Operations](roadmaps/NEXT_OPERATIONS.md): real retry, cost, and memory
-   behavior.
+4. [Operations](roadmaps/NEXT_OPERATIONS.md): completed real retry, cost, and
+   memory behavior roadmap.
+5. [Next: Operator UI](roadmaps/NEXT_OPERATOR_UI.md): read-only local UI for
+   workflow log inspection and operational status.
 
 ## High-Level Progress
 
 - [x] Dry-run kernel roadmap.
 - [x] Real runner roadmap.
 - [x] Orchestration roadmap.
-- [ ] Operations roadmap.
+- [x] Operations roadmap.
+- [ ] Operator UI roadmap.
 
 ## Rule For Future Roadmaps
 

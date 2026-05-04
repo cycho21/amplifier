@@ -6,7 +6,7 @@ Turn operational log shapes into real operational behavior.
 
 ## Status
 
-In progress.
+Completed.
 
 ## Sequence
 

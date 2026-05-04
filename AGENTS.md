@@ -56,6 +56,9 @@ explicitly asks for governance behavior.
 5. Prefer test-first implementation for behavior changes.
 6. Run the narrowest useful local verification after changes.
 7. Do not revert unrelated user changes.
+8. After completing and verifying requested work, check whether there is a
+   clear next task from current roadmaps, plans, or task context. If one exists,
+   present it and ask for the user's direction before starting it.
 
 ## Sub-Agent Approval
 
