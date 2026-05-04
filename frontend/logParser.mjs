@@ -2,7 +2,7 @@ export function parseLogFile(fileName, content) {
   let data;
 
   try {
-    data = JSON.parse(content);
+    data = JSON.parse(stripBom(content));
   } catch (error) {
     return {
       ok: false,
@@ -46,6 +46,10 @@ export function parseLogFile(fileName, content) {
       memory: normalizeMemory(output.memory)
     }
   };
+}
+
+function stripBom(content) {
+  return content.startsWith('\uFEFF') ? content.slice(1) : content;
 }
 
 function normalizeVerificationEvidence(data, output, steps) {

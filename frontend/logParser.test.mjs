@@ -60,6 +60,16 @@ test('parseLogFile returns a workflow run summary with step count and status', (
   assert.equal(result.run.memory.loaded, false);
 });
 
+test('parseLogFile accepts JSON logs with a UTF-8 BOM', () => {
+  const result = parseLogFile(
+    'bom.json',
+    '\uFEFF{"run_id":"bom-run","runner":"codex","role":"tester","task_id":"000","output":{"verification_result":"Loaded.","risks":[],"next_steps":[]}}'
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.run.runId, 'bom-run');
+});
+
 test('parseLogFile returns a clear error for malformed JSON', () => {
   const result = parseLogFile('broken.json', '{');
 

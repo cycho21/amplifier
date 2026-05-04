@@ -1,8 +1,7 @@
 import { summarizeRuns } from './logParser.mjs';
 import { summarizeRoadmaps } from './roadmapParser.mjs';
 
-const fileInput = document.querySelector('#log-files');
-const roadmapInput = document.querySelector('#roadmap-files');
+const refreshButton = document.querySelector('#refresh-data');
 const runList = document.querySelector('#run-list');
 const errorList = document.querySelector('#error-list');
 const roadmapList = document.querySelector('#roadmap-list');
@@ -16,18 +15,38 @@ const roadmapCount = document.querySelector('#roadmap-count');
 
 let currentRuns = [];
 
-fileInput.addEventListener('change', async (event) => {
-  const files = Array.from(event.target.files || []).filter((file) =>
-    file.name.toLowerCase().endsWith('.json')
-  );
-  const fileContents = await Promise.all(
-    files.map(async (file) => ({
-      name: file.webkitRelativePath || file.name,
-      content: await file.text()
-    }))
-  );
+refreshButton.addEventListener('click', loadLocalData);
+loadLocalData();
 
-  const summary = summarizeRuns(fileContents);
+async function loadLocalData() {
+  refreshButton.disabled = true;
+
+  try {
+    const [logFiles, roadmapFiles] = await Promise.all([
+      fetchJson('/api/logs'),
+      fetchJson('/api/roadmaps')
+    ]);
+
+    renderLogSummary(summarizeRuns(logFiles));
+    renderRoadmapSummary(summarizeRoadmaps(roadmapFiles));
+  } catch (error) {
+    renderLoadFailure(error);
+  } finally {
+    refreshButton.disabled = false;
+  }
+}
+
+async function fetchJson(path) {
+  const response = await fetch(path);
+
+  if (!response.ok) {
+    throw new Error(`${path} returned ${response.status}`);
+  }
+
+  return response.json();
+}
+
+function renderLogSummary(summary) {
   currentRuns = summary.runs;
   renderSummary(summary);
   renderRunList(summary.runs, summary.emptyMessage);
@@ -38,24 +57,36 @@ fileInput.addEventListener('change', async (event) => {
   } else {
     clearInspector();
   }
-});
+}
 
-roadmapInput.addEventListener('change', async (event) => {
-  const files = Array.from(event.target.files || []).filter((file) =>
-    file.name.toLowerCase().endsWith('.md')
-  );
-  const fileContents = await Promise.all(
-    files.map(async (file) => ({
-      name: file.webkitRelativePath || file.name,
-      content: await file.text()
-    }))
-  );
-
-  const summary = summarizeRoadmaps(fileContents);
+function renderRoadmapSummary(summary) {
   roadmapCount.textContent = String(summary.roadmaps.length);
   renderRoadmaps(summary.roadmaps, summary.emptyMessage);
   renderRoadmapErrors(summary.errors);
-});
+}
+
+function renderLoadFailure(error) {
+  renderLogSummary({
+    runs: [],
+    errors: [
+      {
+        fileName: 'local server',
+        error: error.message
+      }
+    ],
+    emptyMessage: 'No logs loaded.'
+  });
+  renderRoadmapSummary({
+    roadmaps: [],
+    errors: [
+      {
+        fileName: 'local server',
+        error: error.message
+      }
+    ],
+    emptyMessage: 'No roadmaps loaded.'
+  });
+}
 
 function renderSummary(summary) {
   runCount.textContent = String(summary.runs.length);

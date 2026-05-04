@@ -29,26 +29,6 @@ input {
   font: inherit;
 }
 
-#log-files {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-#roadmap-files {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
 .app-shell {
   min-block-size: 100vh;
   display: flex;
@@ -255,6 +235,7 @@ input {
 }
 
 .status-badge {
+  flex: 0 0 auto;
   max-inline-size: 220px;
   padding: 5px 10px;
   border-radius: 999px;
@@ -262,7 +243,8 @@ input {
   color: var(--ok);
   font-size: 12px;
   font-weight: 750;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 .status-grid {

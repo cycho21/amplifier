@@ -14,17 +14,11 @@
           <h1>Operator</h1>
         </div>
         <div class="toolbar-actions">
-          <label class="open-button" for="log-files" title="Open workflow log JSON files">
-            <span aria-hidden="true">+</span>
-            <span>Open logs</span>
-          </label>
-          <label class="open-button secondary" for="roadmap-files" title="Open roadmap markdown files">
-            <span aria-hidden="true">+</span>
-            <span>Open roadmaps</span>
-          </label>
+          <button id="refresh-data" class="open-button" type="button" title="Reload local logs and roadmaps from this repository.">
+            <span aria-hidden="true">↻</span>
+            <span>Refresh local data</span>
+          </button>
         </div>
-        <input id="log-files" type="file" accept=".json,application/json" multiple webkitdirectory>
-        <input id="roadmap-files" type="file" accept=".md,text/markdown,text/plain" multiple webkitdirectory>
       </header>
 
       <section class="summary-strip" aria-label="Run summary">
