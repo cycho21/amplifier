@@ -164,7 +164,7 @@ Assert-RequiredOutputFields $fallbackLog.output
     -AgentRole "agents/implementer.md" `
     -Mode "real" `
     -AllowReal `
-    -CodexCommand ".\test-fixtures\fake-codex.ps1" `
+    -CodexCommand ".\test-fixtures\fake-codex-structured.ps1" `
     -PromptOut $realPromptOut `
     -LogOut $realLogOut `
     -RawOutputOut $rawOutputOut

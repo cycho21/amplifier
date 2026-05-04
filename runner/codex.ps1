@@ -169,6 +169,91 @@ function Read-StructuredCodexOutput {
     }
 }
 
+function Get-IntProperty {
+    param(
+        $Object,
+        [string[]]$Names
+    )
+
+    if ($null -eq $Object) {
+        return 0
+    }
+
+    foreach ($name in $Names) {
+        if ($Object.PSObject.Properties.Name -contains $name) {
+            return [int]$Object.$name
+        }
+    }
+
+    return 0
+}
+
+function New-ProviderCostMetadata {
+    param(
+        $RunnerSelection,
+        [string]$Source,
+        [string]$Model,
+        [int]$InputTokens,
+        [int]$OutputTokens,
+        [int]$TotalTokens
+    )
+
+    return [ordered]@{
+        provider = $RunnerSelection.provider
+        tool = $RunnerSelection.tool
+        model = $Model
+        input_tokens = $InputTokens
+        output_tokens = $OutputTokens
+        total_tokens = $TotalTokens
+        source = $Source
+    }
+}
+
+function Read-ProviderCostMetadata {
+    param(
+        [string]$RawOutputPath,
+        $RunnerSelection
+    )
+
+    $metadata = New-ProviderCostMetadata $RunnerSelection "runner-selection" "" 0 0 0
+
+    if (-not (Test-Path $RawOutputPath)) {
+        return $metadata
+    }
+
+    $rawOutput = Get-Content -Encoding utf8 $RawOutputPath -Raw
+
+    try {
+        $parsed = $rawOutput | ConvertFrom-Json
+    } catch {
+        return $metadata
+    }
+
+    $model = ""
+    if ($parsed.PSObject.Properties.Name -contains "model") {
+        $model = [string]$parsed.model
+    }
+
+    $usage = $null
+    if ($parsed.PSObject.Properties.Name -contains "usage") {
+        $usage = $parsed.usage
+    }
+
+    $inputTokens = Get-IntProperty $usage @("input_tokens", "prompt_tokens")
+    $outputTokens = Get-IntProperty $usage @("output_tokens", "completion_tokens")
+    $totalTokens = Get-IntProperty $usage @("total_tokens")
+
+    if ($totalTokens -eq 0 -and ($inputTokens -gt 0 -or $outputTokens -gt 0)) {
+        $totalTokens = $inputTokens + $outputTokens
+    }
+
+    if ([string]::IsNullOrWhiteSpace($model) -and $inputTokens -eq 0 -and $outputTokens -eq 0 -and $totalTokens -eq 0) {
+        return $metadata
+    }
+
+    return New-ProviderCostMetadata $RunnerSelection "codex-raw-output" $model $inputTokens $outputTokens $totalTokens
+}
+
 $taskPath = "tasks/$TaskId.md"
 
 $planText = Read-Utf8File $Plan
@@ -242,6 +327,8 @@ $output = [ordered]@{
     risks = @("This run does not verify actual LLM execution.")
     next_steps = @("Replace dry-run behavior with a real runner invocation when ready.")
 }
+$failureMessage = ""
+$providerCostMetadata = New-ProviderCostMetadata $runnerSelection "runner-selection" "" 0 0 0
 
 if ($effectiveMode -eq "real") {
     $runnerName = "codex-real"
@@ -249,6 +336,7 @@ if ($effectiveMode -eq "real") {
     $invocation.real_enabled = $true
     $invocation.exit_code = $realResult.exit_code
     $invocation.raw_output = $RawOutputOut
+    $providerCostMetadata = Read-ProviderCostMetadata $RawOutputOut $runnerSelection
 
     if ($realResult.exit_code -ne 0) {
         $output.summary = "Real Codex invocation failed."
@@ -262,10 +350,11 @@ if ($effectiveMode -eq "real") {
             $output = $structuredOutput
             $invocation.parsed_output = $true
         } else {
-            $output.summary = "Real Codex invocation completed behind the runner adapter boundary."
-            $output.verification_result = "Codex CLI exited with code 0 and wrote raw output to $RawOutputOut."
-            $output.risks = @("Raw Codex output was not parseable as the required structured fields.")
-            $output.next_steps = @("Add malformed output fixtures and strict failure handling in the next real-runner step.")
+            $output.summary = "Malformed Codex output."
+            $output.verification_result = "Codex CLI exited with code 0 but raw output was malformed."
+            $output.risks = @("The real Codex response did not contain every required structured output field.")
+            $output.next_steps = @("Inspect the raw Codex output and retry after fixing the runner response format.")
+            $failureMessage = "Malformed Codex output: raw output did not contain every required structured output field."
         }
     }
 }
@@ -282,6 +371,9 @@ $log = [ordered]@{
         effective_mode = $effectiveMode
     }
     invocation = $invocation
+    cost_tracking = [ordered]@{
+        provider_metadata = $providerCostMetadata
+    }
     inputs = @(
         $Plan,
         $Contract,
@@ -296,3 +388,7 @@ $log | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 -Path $LogOut
 
 Write-Output "Prompt written to $PromptOut"
 Write-Output "Log written to $LogOut"
+
+if (-not [string]::IsNullOrWhiteSpace($failureMessage)) {
+    throw $failureMessage
+}

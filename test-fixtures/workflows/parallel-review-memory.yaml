@@ -1,0 +1,40 @@
+workflow: parallel-review-memory
+
+description: Parallel real workflow fixture with persistent memory policy.
+
+mode: parallel
+
+memory:
+  enabled: true
+  scope: workflow
+  persistence: real
+  path: logs/test-real-memory/{workflow}-{task_id}.json
+
+input:
+  - docs/plan/PLAN.md
+  - docs/plan/CONTRACT.md
+  - tasks/{task_id}.md
+
+steps:
+  - id: backend-engineer
+    role: backend-engineer
+    agent_role: agents/backend-engineer.md
+    execution_spec: execution/backend-engineer.yaml
+    task_id: "{task_id}"
+    depends_on: []
+
+  - id: frontend-engineer
+    role: frontend-engineer
+    agent_role: agents/frontend-engineer.md
+    execution_spec: execution/frontend-engineer.yaml
+    task_id: "{task_id}"
+    depends_on: []
+
+output:
+  - workflow_summary
+  - step_logs
+  - execution_mode
+  - parallel_groups
+  - final_status
+  - risks
+  - next_steps

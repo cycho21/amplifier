@@ -51,8 +51,8 @@ malformed when the adapter cannot populate every required output field from the
 tool response.
 
 Failure logs must preserve enough metadata to diagnose the adapter failure
-without pretending the task succeeded. The exact malformed-output fixtures and
-parser behavior are defined in a later implementation step.
+without pretending the task succeeded. The Codex adapter must fail invalid JSON
+and responses that omit any required output field.
 
 ## Codex Invocation Boundary
 
@@ -63,8 +63,8 @@ effective invocation mode, command name, exit code, and raw output path.
 When the raw Codex final response is valid JSON with the required output fields,
 the adapter must copy those values into the structured runner log.
 
-Malformed-output failure fixtures and strict failure behavior are a separate
-step.
+Malformed-output failure fixtures must cover invalid JSON and missing required
+fields.
 
 ## Out Of Scope
 

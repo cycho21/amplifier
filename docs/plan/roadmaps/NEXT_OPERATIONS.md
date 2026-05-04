@@ -6,17 +6,17 @@ Turn operational log shapes into real operational behavior.
 
 ## Status
 
-Not started.
+In progress.
 
 ## Sequence
 
-1. [ ] Implement real retry behavior for retryable runner failures.
-2. [ ] Record every retry attempt in workflow and step logs.
-3. [ ] Add provider cost metadata sources.
-4. [ ] Calculate estimated cost from usage metadata.
-5. [ ] Implement persistent memory read/write using the existing memory policy shape.
-6. [ ] Add memory safety rules for scope, overwrite behavior, and stale data.
-7. [ ] Add tests for retry exhaustion, cost totals, and memory persistence.
+1. [x] Implement real retry behavior for retryable runner failures.
+2. [x] Record every retry attempt in workflow and step logs.
+3. [x] Add provider cost metadata sources.
+4. [x] Calculate estimated cost from usage metadata.
+5. [x] Implement persistent memory read/write using the existing memory policy shape.
+6. [x] Add memory safety rules for scope, overwrite behavior, and stale data.
+7. [x] Add tests for retry exhaustion, cost totals, and memory persistence.
 
 ## Acceptance Criteria
 

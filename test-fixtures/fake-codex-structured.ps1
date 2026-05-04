@@ -14,6 +14,12 @@ if ([string]::IsNullOrWhiteSpace($outputPath)) {
 }
 
 $response = [ordered]@{
+    model = "gpt-5-test"
+    usage = [ordered]@{
+        input_tokens = 11
+        output_tokens = 7
+        total_tokens = 18
+    }
     summary = "Structured Codex output was captured."
     changed_files = @("runner/codex.ps1")
     verification_result = "Structured fake Codex response parsed successfully."

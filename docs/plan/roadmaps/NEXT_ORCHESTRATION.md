@@ -6,17 +6,17 @@ Move from dry-run workflow grouping to real orchestration behavior.
 
 ## Status
 
-In progress.
+Completed.
 
 ## Sequence
 
 1. [x] Define dependency graph validation for workflow specs.
 2. [x] Detect cycles before execution.
-3. [ ] Execute independent steps concurrently in real parallel mode.
-4. [ ] Preserve deterministic dry-run grouping for tests.
-5. [ ] Add cancellation and failure propagation rules.
-6. [ ] Define result voting separately from structural comparison.
-7. [ ] Implement voting only after comparison and real execution are stable.
+3. [x] Execute independent steps concurrently in real parallel mode.
+4. [x] Preserve deterministic dry-run grouping for tests.
+5. [x] Add cancellation and failure propagation rules.
+6. [x] Define result voting separately from structural comparison.
+7. [x] Implement voting only after comparison and real execution are stable.
 
 ## Acceptance Criteria
 

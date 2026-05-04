@@ -149,7 +149,21 @@ Parallel review dry-run grouping:
 ```
 
 Parallel mode currently records deterministic `parallel_groups`. It does not
-launch real concurrent processes yet.
+launch real concurrent processes unless real workflow execution is explicitly
+enabled.
+
+Real parallel workflow execution is guarded by both `-Mode real` and
+`-AllowReal`:
+
+```powershell
+.\runner\workflow.ps1 `
+  -TaskId "000_template" `
+  -WorkflowSpec "workflows/parallel-review.yaml" `
+  -Mode "real" `
+  -AllowReal `
+  -StepRunnerCommand ".\runner\codex.ps1" `
+  -LogOut "logs/test-workflow-real-parallel-review-000_template.json"
+```
 
 ## Running Tests
 
@@ -158,16 +172,24 @@ Run individual tests with Windows PowerShell:
 ```powershell
 .\tests\test_workflow_runner.ps1
 .\tests\test_parallel_workflow_runner.ps1
+.\tests\test_real_parallel_workflow_runner.ps1
+.\tests\test_real_parallel_workflow_failure.ps1
 .\tests\test_workflow_graph_validation.ps1
 .\tests\test_runner_invocation_contract.ps1
 .\tests\test_execution_runner_selection.ps1
 .\tests\test_execution_input_paths.ps1
 .\tests\test_codex_runner_invocation_boundary.ps1
 .\tests\test_codex_runner_structured_output.ps1
+.\tests\test_codex_runner_malformed_output.ps1
+.\tests\test_codex_runner_log_compatibility.ps1
 .\tests\test_workflow_comparison.ps1
+.\tests\test_workflow_voting_contract.ps1
+.\tests\test_workflow_voting_gate.ps1
 .\tests\test_workflow_retry_policy.ps1
+.\tests\test_real_workflow_retry.ps1
 .\tests\test_workflow_cost_tracking.ps1
 .\tests\test_workflow_memory_policy.ps1
+.\tests\test_real_workflow_memory.ps1
 ```
 
 The Codex boundary tests use local fake Codex fixtures and do not call the real

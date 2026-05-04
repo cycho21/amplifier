@@ -98,3 +98,35 @@ Scope:
 Verification:
 
 - Passed: `.\tests\test_codex_runner_invocation_boundary.ps1`.
+
+## 2026-05-04: Malformed Codex Output Fixtures
+
+Status: completed.
+
+Scope:
+
+- Add fake Codex fixtures for invalid JSON and missing required output fields.
+- Fail real Codex runs when raw output cannot populate every required structured field.
+- Preserve failure logs with runner metadata, exit code, raw output path, and required output fields.
+- Keep valid structured Codex output passing through unchanged.
+
+Verification:
+
+- Passed: `.\tests\test_codex_runner_malformed_output.ps1`.
+- Passed: `.\tests\test_codex_runner_invocation_boundary.ps1`.
+- Passed: `.\tests\test_codex_runner_structured_output.ps1`.
+
+## 2026-05-04: Codex Log Compatibility Coverage
+
+Status: completed.
+
+Scope:
+
+- Add a compatibility test that generates dry-run and fake real Codex logs from the same task.
+- Prove real-run logs preserve the dry-run top-level log fields.
+- Prove real-run output preserves required `summary`, `changed_files`, `verification_result`, `risks`, and `next_steps` fields.
+- Prove runner-specific metadata remains additive across `runner_selection` and `invocation`.
+
+Verification:
+
+- Passed: `.\tests\test_codex_runner_log_compatibility.ps1`.

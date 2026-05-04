@@ -32,6 +32,44 @@ if ($log.invocation.parsed_output -ne $true) {
     throw "Expected invocation.parsed_output true"
 }
 
+if (-not ($log.PSObject.Properties.Name -contains "cost_tracking")) {
+    throw "Expected Codex runner log to include cost_tracking metadata"
+}
+
+if (-not ($log.cost_tracking.PSObject.Properties.Name -contains "provider_metadata")) {
+    throw "Expected Codex runner cost_tracking to include provider_metadata"
+}
+
+$providerMetadata = $log.cost_tracking.provider_metadata
+
+if ($providerMetadata.provider -ne "codex") {
+    throw "Expected cost metadata provider codex, got $($providerMetadata.provider)"
+}
+
+if ($providerMetadata.tool -ne "codex-cli") {
+    throw "Expected cost metadata tool codex-cli, got $($providerMetadata.tool)"
+}
+
+if ($providerMetadata.model -ne "gpt-5-test") {
+    throw "Expected cost metadata model gpt-5-test, got $($providerMetadata.model)"
+}
+
+if ($providerMetadata.input_tokens -ne 11) {
+    throw "Expected cost metadata input_tokens 11, got $($providerMetadata.input_tokens)"
+}
+
+if ($providerMetadata.output_tokens -ne 7) {
+    throw "Expected cost metadata output_tokens 7, got $($providerMetadata.output_tokens)"
+}
+
+if ($providerMetadata.total_tokens -ne 18) {
+    throw "Expected cost metadata total_tokens 18, got $($providerMetadata.total_tokens)"
+}
+
+if ($providerMetadata.source -ne "codex-raw-output") {
+    throw "Expected cost metadata source codex-raw-output, got $($providerMetadata.source)"
+}
+
 if ($log.output.summary -ne "Structured Codex output was captured.") {
     throw "Expected parsed summary, got '$($log.output.summary)'"
 }

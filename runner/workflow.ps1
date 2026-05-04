@@ -1,7 +1,11 @@
 param(
     [string]$TaskId = "000_template",
     [string]$WorkflowSpec = "workflows/implementation-review.yaml",
-    [string]$LogOut = "logs/20260426-workflow-implementation-review-000_template.json"
+    [string]$LogOut = "logs/20260426-workflow-implementation-review-000_template.json",
+    [string]$Mode = "dry-run",
+    [switch]$AllowReal,
+    [string]$StepRunnerCommand = ".\runner\codex.ps1",
+    [string]$StepLogDir = "logs/workflow-steps"
 )
 
 $ErrorActionPreference = "Stop"
@@ -278,14 +282,79 @@ function Read-MemoryPolicy {
 }
 
 function New-StepCostTracking {
-    param($CostTrackingPolicy)
+    param(
+        $CostTrackingPolicy,
+        $ProviderMetadata = $null
+    )
 
-    return [ordered]@{
+    $estimatedCost = Get-EstimatedStepCost $ProviderMetadata
+
+    $costTracking = [ordered]@{
         enabled = $CostTrackingPolicy.enabled
         currency = $CostTrackingPolicy.currency
         unit = $CostTrackingPolicy.unit
-        estimated_cost = 0
+        estimated_cost = $estimatedCost
     }
+
+    if ($null -ne $ProviderMetadata) {
+        $costTracking.provider_metadata = $ProviderMetadata
+    }
+
+    return $costTracking
+}
+
+function Get-ProviderMetadataNumber {
+    param(
+        $ProviderMetadata,
+        [string]$Name
+    )
+
+    if ($null -eq $ProviderMetadata) {
+        return [decimal]0
+    }
+
+    if (-not ($ProviderMetadata.PSObject.Properties.Name -contains $Name)) {
+        return [decimal]0
+    }
+
+    return [decimal]$ProviderMetadata.$Name
+}
+
+function Get-EstimatedStepCost {
+    param($ProviderMetadata)
+
+    $rateUnitTokens = Get-ProviderMetadataNumber $ProviderMetadata "rate_unit_tokens"
+
+    if ($rateUnitTokens -le 0) {
+        return 0
+    }
+
+    $inputTokens = Get-ProviderMetadataNumber $ProviderMetadata "input_tokens"
+    $outputTokens = Get-ProviderMetadataNumber $ProviderMetadata "output_tokens"
+    $inputTokenRate = Get-ProviderMetadataNumber $ProviderMetadata "input_token_rate"
+    $outputTokenRate = Get-ProviderMetadataNumber $ProviderMetadata "output_token_rate"
+
+    $estimatedCost = (($inputTokens * $inputTokenRate) + ($outputTokens * $outputTokenRate)) / $rateUnitTokens
+
+    return [Math]::Round($estimatedCost, 6)
+}
+
+function Get-StepProviderMetadata {
+    param($ParsedStepLog)
+
+    if ($null -eq $ParsedStepLog) {
+        return $null
+    }
+
+    if (-not ($ParsedStepLog.PSObject.Properties.Name -contains "cost_tracking")) {
+        return $null
+    }
+
+    if (-not ($ParsedStepLog.cost_tracking.PSObject.Properties.Name -contains "provider_metadata")) {
+        return $null
+    }
+
+    return $ParsedStepLog.cost_tracking.provider_metadata
 }
 
 function New-StepMemory {
@@ -299,6 +368,58 @@ function New-StepMemory {
         loaded = $false
         written = $false
     }
+}
+
+function ConvertTo-StringArray {
+    param($Value)
+
+    if ($null -eq $Value) {
+        return @()
+    }
+
+    if ($Value -is [array]) {
+        return @($Value | ForEach-Object { [string]$_ })
+    }
+
+    return @([string]$Value)
+}
+
+function Read-RetryAttemptLog {
+    param([string]$Path)
+
+    if (-not (Test-Path $Path)) {
+        return @()
+    }
+
+    $attemptText = Get-Content -Encoding utf8 $Path -Raw
+
+    if ([string]::IsNullOrWhiteSpace($attemptText)) {
+        return @()
+    }
+
+    return @($attemptText | ConvertFrom-Json | ForEach-Object {
+        [ordered]@{
+            step_id = [string]$_.step_id
+            role = [string]$_.role
+            attempt = [int]$_.attempt
+            status = [string]$_.status
+            reason = [string]$_.reason
+        }
+    })
+}
+
+function New-WorkflowRetryAttempts {
+    param($StepLogs)
+
+    $retryAttempts = @()
+
+    foreach ($stepLog in $StepLogs) {
+        if ($stepLog.Contains("retry_attempts")) {
+            $retryAttempts += @($stepLog.retry_attempts)
+        }
+    }
+
+    return $retryAttempts
 }
 
 function New-StepLog {
@@ -315,6 +436,7 @@ function New-StepLog {
         task_id = $Step.task_id
         retry_policy = $RetryPolicy
         attempts = 1
+        retry_attempts = @()
         cost_tracking = New-StepCostTracking $CostTrackingPolicy
         memory = New-StepMemory $MemoryPolicy
         inputs = @(
@@ -330,6 +452,50 @@ function New-StepLog {
             next_steps = @("Replace dry-run behavior with a real step invocation when ready.")
         }
     }
+}
+
+function New-RealStepLog {
+    param(
+        $Step,
+        $ParsedStepLog,
+        [string]$StepLogPath,
+        [int]$Attempts,
+        $RetryAttempts,
+        $RetryPolicy,
+        $CostTrackingPolicy,
+        $MemoryPolicy
+    )
+
+    $stepLog = [ordered]@{
+        step_id = $Step.id
+        role = $Step.role
+        task_id = $Step.task_id
+        runner = [string]$ParsedStepLog.runner
+        runner_log = $StepLogPath
+        retry_policy = $RetryPolicy
+        attempts = $Attempts
+        retry_attempts = $RetryAttempts
+        cost_tracking = New-StepCostTracking $CostTrackingPolicy (Get-StepProviderMetadata $ParsedStepLog)
+        memory = New-StepMemory $MemoryPolicy
+        inputs = ConvertTo-StringArray $ParsedStepLog.inputs
+        output = [ordered]@{
+            summary = [string]$ParsedStepLog.output.summary
+            changed_files = ConvertTo-StringArray $ParsedStepLog.output.changed_files
+            verification_result = [string]$ParsedStepLog.output.verification_result
+            risks = ConvertTo-StringArray $ParsedStepLog.output.risks
+            next_steps = ConvertTo-StringArray $ParsedStepLog.output.next_steps
+        }
+    }
+
+    if ($ParsedStepLog.PSObject.Properties.Name -contains "timing") {
+        $stepLog.timing = $ParsedStepLog.timing
+    }
+
+    if ($ParsedStepLog.PSObject.Properties.Name -contains "invocation") {
+        $stepLog.invocation = $ParsedStepLog.invocation
+    }
+
+    return $stepLog
 }
 
 function Test-StepInputs {
@@ -504,6 +670,316 @@ function Invoke-ParallelDryRun {
     }
 }
 
+function Invoke-RealStepRunnerJob {
+    param(
+        $Step,
+        [string]$WorkflowName,
+        [string]$WorkingDirectory,
+        [string]$StepRunnerCommand,
+        [string]$StepLogDir,
+        $RetryPolicy
+    )
+
+    $stepPromptOut = "logs/prompts/workflow-$WorkflowName-$($Step.id)-$($Step.task_id).prompt.txt"
+    $stepLogOut = Join-Path $StepLogDir "$WorkflowName-$($Step.id)-$($Step.task_id).json"
+    $stepAttemptOut = "$stepLogOut.attempts"
+    $stepRetryAttemptsOut = "$stepLogOut.retry-attempts.json"
+    $resolvedCommand = $StepRunnerCommand
+
+    if (Test-Path $StepRunnerCommand) {
+        $resolvedCommand = (Resolve-Path $StepRunnerCommand).Path
+    }
+
+    return Start-Job -ArgumentList @(
+        $WorkingDirectory,
+        $resolvedCommand,
+        $Step.id,
+        $Step.task_id,
+        $Step.role,
+        $Step.execution_spec,
+        $Step.agent_role,
+        $stepPromptOut,
+        $stepLogOut,
+        $stepAttemptOut,
+        $stepRetryAttemptsOut,
+        $RetryPolicy.max_attempts,
+        @($RetryPolicy.retry_on)
+    ) -ScriptBlock {
+        param(
+            [string]$WorkingDirectory,
+            [string]$Command,
+            [string]$StepId,
+            [string]$TaskId,
+            [string]$Role,
+            [string]$ExecutionSpec,
+            [string]$AgentRole,
+            [string]$PromptOut,
+            [string]$LogOut,
+            [string]$AttemptOut,
+            [string]$RetryAttemptsOut,
+            [int]$MaxAttempts,
+            [string[]]$RetryOn
+        )
+
+        Set-Location $WorkingDirectory
+
+        if ($MaxAttempts -lt 1) {
+            $MaxAttempts = 1
+        }
+
+        $retryRunnerErrors = @($RetryOn) -contains "runner-error"
+        $lastError = ""
+        $attemptRecords = @()
+
+        function Write-AttemptRecords {
+            param($Records, [string]$Path)
+
+            ConvertTo-Json -InputObject @($Records) -Depth 6 | Set-Content -Encoding utf8 -Path $Path
+        }
+
+        for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+            Set-Content -Encoding utf8 -Path $AttemptOut -Value $attempt
+
+            try {
+                & $Command `
+                    -TaskId $TaskId `
+                    -Role $Role `
+                    -ExecutionSpec $ExecutionSpec `
+                    -AgentRole $AgentRole `
+                    -Mode "real" `
+                    -AllowReal `
+                    -PromptOut $PromptOut `
+                    -LogOut $LogOut
+
+                if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+                    throw "Step runner exited with code $LASTEXITCODE for step '$Role'"
+                }
+
+                $attemptRecords += [ordered]@{
+                    step_id = $StepId
+                    role = $Role
+                    attempt = $attempt
+                    status = "succeeded"
+                    reason = ""
+                }
+                Write-AttemptRecords $attemptRecords $RetryAttemptsOut
+                return
+            } catch {
+                $lastError = $_.Exception.Message
+                $attemptRecords += [ordered]@{
+                    step_id = $StepId
+                    role = $Role
+                    attempt = $attempt
+                    status = "failed"
+                    reason = $lastError
+                }
+                Write-AttemptRecords $attemptRecords $RetryAttemptsOut
+
+                if (-not $retryRunnerErrors -or $attempt -ge $MaxAttempts) {
+                    throw $lastError
+                }
+            }
+        }
+    } | Add-Member -NotePropertyName StepId -NotePropertyValue $Step.id -PassThru |
+        Add-Member -NotePropertyName StepLogOut -NotePropertyValue $stepLogOut -PassThru |
+        Add-Member -NotePropertyName StepAttemptOut -NotePropertyValue $stepAttemptOut -PassThru |
+        Add-Member -NotePropertyName StepRetryAttemptsOut -NotePropertyValue $stepRetryAttemptsOut -PassThru
+}
+
+function Invoke-ParallelRealRun {
+    param(
+        $Steps,
+        $RetryPolicy,
+        $CostTrackingPolicy,
+        $MemoryPolicy,
+        [string]$WorkflowName,
+        [string]$StepRunnerCommand,
+        [string]$StepLogDir
+    )
+
+    $remaining = @($Steps)
+    $completed = @{}
+    $stepLogs = @()
+    $parallelGroups = @()
+    $groupIndex = 1
+    $workingDirectory = (Get-Location).Path
+    $stepById = @{}
+
+    foreach ($step in $Steps) {
+        $stepById[$step.id] = $step
+    }
+
+    New-Item -ItemType Directory -Force -Path $StepLogDir | Out-Null
+
+    while ($remaining.Count -gt 0) {
+        $ready = @($remaining | Where-Object {
+            $isReady = $true
+
+            foreach ($dependency in $_.depends_on) {
+                if (-not $completed.ContainsKey($dependency)) {
+                    $isReady = $false
+                    break
+                }
+            }
+
+            $isReady
+        })
+
+        if ($ready.Count -eq 0) {
+            throw "Parallel workflow contains unresolved or cyclic dependencies."
+        }
+
+        $groupSteps = @()
+        $jobs = @()
+
+        foreach ($step in $ready) {
+            Test-StepInputs $step
+            $jobs += Invoke-RealStepRunnerJob $step $WorkflowName $workingDirectory $StepRunnerCommand $StepLogDir $RetryPolicy
+            $groupSteps += [ordered]@{
+                step_id = $step.id
+                role = $step.role
+            }
+        }
+
+        $readyIds = @($ready | ForEach-Object { $_.id })
+        $failure = $null
+
+        while ($true) {
+            $pendingJobs = @($jobs | Where-Object { $_.State -eq "Running" -or $_.State -eq "NotStarted" })
+
+            if ($pendingJobs.Count -eq 0) {
+                break
+            }
+
+            $finishedJobs = @(Wait-Job -Job $pendingJobs -Any)
+
+            foreach ($job in $finishedJobs) {
+                $receiveError = ""
+
+                try {
+                    Receive-Job -Job $job -ErrorAction Stop | Out-Null
+                } catch {
+                    $receiveError = $_.Exception.Message
+                }
+
+                if ($job.State -ne "Completed" -or -not [string]::IsNullOrWhiteSpace($receiveError)) {
+                    $failedStep = $stepById[$job.StepId]
+                    $failure = [ordered]@{
+                        step_id = $failedStep.id
+                        role = $failedStep.role
+                        reason = if ([string]::IsNullOrWhiteSpace($receiveError)) { "Step runner failed." } else { $receiveError }
+                    }
+                    break
+                }
+            }
+
+            if ($null -ne $failure) {
+                break
+            }
+        }
+
+        if ($null -ne $failure) {
+            $cancelledSteps = @()
+            $retryAttempts = @()
+
+            foreach ($job in @($jobs | Where-Object { $_.State -eq "Running" -or $_.State -eq "NotStarted" })) {
+                Stop-Job -Job $job | Out-Null
+                $cancelledStep = $stepById[$job.StepId]
+                $cancelledSteps += [ordered]@{
+                    step_id = $cancelledStep.id
+                    role = $cancelledStep.role
+                    reason = "Cancelled after another step in the parallel batch failed."
+                }
+            }
+
+            $skippedSteps = @($remaining | Where-Object { $readyIds -notcontains $_.id } | ForEach-Object {
+                [ordered]@{
+                    step_id = $_.id
+                    role = $_.role
+                    reason = "Skipped because an upstream parallel batch failed."
+                }
+            })
+
+            foreach ($job in $jobs) {
+                $jobRetryAttempts = Read-RetryAttemptLog $job.StepRetryAttemptsOut
+                $retryAttempts += $jobRetryAttempts
+
+                if ($job.StepId -eq $failure.step_id) {
+                    $failure.attempts = @($jobRetryAttempts).Count
+                    $failure.retry_exhausted = (
+                        @($RetryPolicy.retry_on) -contains "runner-error" -and
+                        $failure.attempts -ge $RetryPolicy.max_attempts
+                    )
+                }
+
+                Remove-Job -Job $job -Force
+            }
+
+            $parallelGroups += [ordered]@{
+                group = $groupIndex
+                steps = $groupSteps
+            }
+
+            return [ordered]@{
+                workflow_summary = "Parallel workflow real run failed."
+                step_logs = $stepLogs
+                execution_mode = "parallel"
+                parallel_groups = $parallelGroups
+                retry_policy = $RetryPolicy
+                attempts = 1
+                retry_attempts = $retryAttempts
+                final_status = "real-failed"
+                failed_steps = @($failure)
+                cancelled_steps = $cancelledSteps
+                skipped_steps = $skippedSteps
+                risks = @("Real parallel workflow stopped after a step failure.")
+                next_steps = @("Inspect failed step logs and retry after resolving the runner failure.")
+            }
+        }
+
+        foreach ($step in $ready) {
+            $job = @($jobs | Where-Object { $_.StepId -eq $step.id })[0]
+            $parsedStepLog = Get-Content -Encoding utf8 $job.StepLogOut -Raw | ConvertFrom-Json
+            $attempts = 1
+
+            if (Test-Path $job.StepAttemptOut) {
+                $attempts = [int](Get-Content -Encoding utf8 $job.StepAttemptOut -Raw)
+            }
+
+            $retryAttempts = Read-RetryAttemptLog $job.StepRetryAttemptsOut
+            $parsedStepLog | Add-Member -NotePropertyName retry_policy -NotePropertyValue $RetryPolicy -Force
+            $parsedStepLog | Add-Member -NotePropertyName attempts -NotePropertyValue $attempts -Force
+            $parsedStepLog | Add-Member -NotePropertyName retry_attempts -NotePropertyValue $retryAttempts -Force
+            $parsedStepLog | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 -Path $job.StepLogOut
+
+            $stepLogs += New-RealStepLog $step $parsedStepLog $job.StepLogOut $attempts $retryAttempts $RetryPolicy $CostTrackingPolicy $MemoryPolicy
+            $completed[$step.id] = $true
+            Remove-Job -Job $job -Force
+        }
+
+        $parallelGroups += [ordered]@{
+            group = $groupIndex
+            steps = $groupSteps
+        }
+
+        $remaining = @($remaining | Where-Object { $readyIds -notcontains $_.id })
+        $groupIndex++
+    }
+
+    return [ordered]@{
+        workflow_summary = "Parallel workflow real run completed."
+        step_logs = $stepLogs
+        execution_mode = "parallel"
+        parallel_groups = $parallelGroups
+        retry_policy = $RetryPolicy
+        attempts = 1
+        retry_attempts = New-WorkflowRetryAttempts $stepLogs
+        final_status = "real-complete"
+        risks = @("This run invoked step runners concurrently within dependency-ready groups.")
+        next_steps = @("Add cancellation and failure propagation rules when real execution behavior is stable.")
+    }
+}
+
 function New-WorkflowMemory {
     param($MemoryPolicy)
 
@@ -514,7 +990,111 @@ function New-WorkflowMemory {
         path = $MemoryPolicy.path
         loaded = $false
         written = $false
+        stale = $false
+        overwrite_allowed = $true
     }
+}
+
+function Set-StepMemoryState {
+    param(
+        $StepLogs,
+        $MemoryState
+    )
+
+    foreach ($stepLog in $StepLogs) {
+        if ($stepLog.Contains("memory")) {
+            $stepLog.memory.loaded = $MemoryState.loaded
+            $stepLog.memory.written = $MemoryState.written
+            $stepLog.memory.stale = $MemoryState.stale
+            $stepLog.memory.overwrite_allowed = $MemoryState.overwrite_allowed
+        }
+    }
+}
+
+function Test-ObjectProperty {
+    param(
+        $Object,
+        [string]$Name
+    )
+
+    if ($null -eq $Object) {
+        return $false
+    }
+
+    return $Object.PSObject.Properties.Name -contains $Name
+}
+
+function Invoke-RealWorkflowMemory {
+    param(
+        $MemoryPolicy,
+        [string]$WorkflowName,
+        [string]$TaskId,
+        $StepLogs
+    )
+
+    $memoryState = New-WorkflowMemory $MemoryPolicy
+
+    if (-not $MemoryPolicy.enabled -or $MemoryPolicy.persistence -eq "dry-run") {
+        return $memoryState
+    }
+
+    $loaded = Test-Path $MemoryPolicy.path
+    $existingMemory = $null
+
+    if ($loaded) {
+        $existingMemoryText = Get-Content -Encoding utf8 $MemoryPolicy.path -Raw
+
+        if (-not [string]::IsNullOrWhiteSpace($existingMemoryText)) {
+            $existingMemory = $existingMemoryText | ConvertFrom-Json
+        }
+    }
+
+    if ($null -ne $existingMemory) {
+        if (
+            (Test-ObjectProperty $existingMemory "workflow") -and
+            -not [string]::IsNullOrWhiteSpace($existingMemory.workflow) -and
+            $existingMemory.workflow -ne $WorkflowName
+        ) {
+            throw "Refusing to overwrite memory outside workflow scope: $($MemoryPolicy.path)"
+        }
+
+        if (
+            (Test-ObjectProperty $existingMemory "task_id") -and
+            -not [string]::IsNullOrWhiteSpace($existingMemory.task_id) -and
+            $existingMemory.task_id -ne $TaskId
+        ) {
+            throw "Refusing to overwrite memory outside workflow scope: $($MemoryPolicy.path)"
+        }
+
+        if ((Test-ObjectProperty $existingMemory "stale") -and $existingMemory.stale -eq $true) {
+            $memoryState.loaded = $true
+            $memoryState.stale = $true
+            $memoryState.overwrite_allowed = $false
+            return $memoryState
+        }
+    }
+
+    $memoryDir = Split-Path -Parent $MemoryPolicy.path
+    if (-not [string]::IsNullOrWhiteSpace($memoryDir)) {
+        New-Item -ItemType Directory -Force -Path $memoryDir | Out-Null
+    }
+
+    $memoryPayload = [ordered]@{
+        workflow = $WorkflowName
+        task_id = $TaskId
+        scope = $MemoryPolicy.scope
+        updated_by = "workflow-real"
+        loaded_existing_memory = $loaded
+        stale = $false
+        step_ids = @($StepLogs | ForEach-Object { $_.step_id })
+    }
+
+    $memoryPayload | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 -Path $MemoryPolicy.path
+
+    $memoryState.loaded = $loaded
+    $memoryState.written = $true
+
+    return $memoryState
 }
 
 function New-WorkflowCostTracking {
@@ -526,20 +1106,32 @@ function New-WorkflowCostTracking {
     $stepCosts = @()
 
     foreach ($stepLog in $StepLogs) {
-        $stepCosts += [ordered]@{
+        $stepCost = [ordered]@{
             step_id = $stepLog.step_id
             role = $stepLog.role
-            estimated_cost = 0
+            estimated_cost = $stepLog.cost_tracking.estimated_cost
             currency = $CostTrackingPolicy.currency
             unit = $CostTrackingPolicy.unit
         }
+
+        if ($stepLog.cost_tracking.Contains("provider_metadata")) {
+            $stepCost.provider_metadata = $stepLog.cost_tracking.provider_metadata
+        }
+
+        $stepCosts += $stepCost
+    }
+
+    $estimatedTotalCost = 0
+
+    foreach ($stepCost in $stepCosts) {
+        $estimatedTotalCost += [decimal]$stepCost.estimated_cost
     }
 
     return [ordered]@{
         enabled = $CostTrackingPolicy.enabled
         currency = $CostTrackingPolicy.currency
         unit = $CostTrackingPolicy.unit
-        estimated_total_cost = 0
+        estimated_total_cost = [Math]::Round($estimatedTotalCost, 6)
         step_costs = $stepCosts
     }
 }
@@ -595,10 +1187,22 @@ function New-WorkflowComparison {
     }
 }
 
+function New-WorkflowVotingGate {
+    param($StepLogs)
+
+    return [ordered]@{
+        voting_method = "not-implemented"
+        eligible_step_ids = @($StepLogs | ForEach-Object { $_.step_id })
+        votes = @()
+        selected_step_id = ""
+        status = "ready-not-implemented"
+    }
+}
+
 $workflowText = Read-Utf8File $WorkflowSpec
 $workflowLines = $workflowText -split "\r?\n"
 $workflowName = Get-ScalarValue $workflowLines "workflow"
-$mode = Get-ScalarValue $workflowLines "mode"
+$workflowMode = Get-ScalarValue $workflowLines "mode"
 $retryPolicy = Read-RetryPolicy $workflowLines
 $costTrackingPolicy = Read-CostTrackingPolicy $workflowLines
 $memoryPolicy = Read-MemoryPolicy $workflowLines $workflowName $TaskId
@@ -606,27 +1210,60 @@ $memoryPolicy = Read-MemoryPolicy $workflowLines $workflowName $TaskId
 $steps = Read-WorkflowSteps $workflowLines $TaskId
 Test-WorkflowGraph $steps
 
-if ($mode -eq "sequential") {
-    $output = Invoke-SequentialDryRun $steps $retryPolicy $costTrackingPolicy $memoryPolicy
-} elseif ($mode -eq "parallel") {
-    $output = Invoke-ParallelDryRun $steps $retryPolicy $costTrackingPolicy $memoryPolicy
-} else {
-    throw "Unsupported workflow mode: $mode"
+if (@("dry-run", "real") -notcontains $Mode) {
+    throw "Unsupported workflow invocation mode: $Mode"
 }
 
-$output.memory = New-WorkflowMemory $memoryPolicy
+if ($Mode -eq "real" -and -not $AllowReal) {
+    throw "Real workflow execution requires -AllowReal"
+}
+
+if ($Mode -eq "real" -and $workflowMode -ne "parallel") {
+    throw "Real workflow execution currently supports parallel workflows only"
+}
+
+if ($Mode -eq "dry-run" -and $workflowMode -eq "sequential") {
+    $output = Invoke-SequentialDryRun $steps $retryPolicy $costTrackingPolicy $memoryPolicy
+} elseif ($Mode -eq "dry-run" -and $workflowMode -eq "parallel") {
+    $output = Invoke-ParallelDryRun $steps $retryPolicy $costTrackingPolicy $memoryPolicy
+} elseif ($Mode -eq "real" -and $workflowMode -eq "parallel") {
+    $output = Invoke-ParallelRealRun $steps $retryPolicy $costTrackingPolicy $memoryPolicy $workflowName $StepRunnerCommand $StepLogDir
+} else {
+    throw "Unsupported workflow mode: $workflowMode"
+}
+
+if ($Mode -eq "real" -and $output.final_status -eq "real-complete") {
+    $output.memory = Invoke-RealWorkflowMemory $memoryPolicy $workflowName $TaskId $output.step_logs
+    Set-StepMemoryState $output.step_logs $output.memory
+} else {
+    $output.memory = New-WorkflowMemory $memoryPolicy
+}
+
 $output.cost_tracking = New-WorkflowCostTracking $costTrackingPolicy $output.step_logs
 $output.comparison = New-WorkflowComparison $output.step_logs
+
+if (
+    $Mode -eq "real" -and
+    $output.final_status -eq "real-complete" -and
+    $output.comparison.status -eq "all-required-fields-present"
+) {
+    $output.voting = New-WorkflowVotingGate $output.step_logs
+}
 
 $logDir = Split-Path -Parent $LogOut
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
 $log = [ordered]@{
     run_id = "20260426-workflow-$workflowName-$TaskId"
-    runner = "workflow-dry-run"
+    runner = if ($Mode -eq "real") { "workflow-real" } else { "workflow-dry-run" }
     workflow = $workflowName
     task_id = $TaskId
     workflow_spec = $WorkflowSpec
+    invocation = [ordered]@{
+        mode = $Mode
+        real_enabled = ($Mode -eq "real")
+        step_runner_command = $StepRunnerCommand
+    }
     output = $output
 }
 

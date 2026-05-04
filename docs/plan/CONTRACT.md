@@ -39,6 +39,8 @@ Read these contracts by concern:
 9. [Runner Invocation Contract](contracts/runner-invocation.md): dry-run and
    real invocation modes, explicit real-run enabling, required output
    preservation, and malformed-output failure behavior.
+10. [Voting Contract](contracts/voting.md): voting boundaries, separation from
+    structural comparison, and future voting output fields.
 
 ## Extension Policy
 
