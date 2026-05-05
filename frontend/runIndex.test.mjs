@@ -53,3 +53,36 @@ test('finishRun updates exit code and allows later runs for the same target', ()
   assert.equal(finished.runs[0].exitCode, 0);
   assert.equal(restarted.runs.length, 2);
 });
+
+test('startRun preserves real execution metadata only when provided', () => {
+  const dryRun = startRun(createRunIndex(), {
+    runId: 'run-1',
+    targetId: 'client-app',
+    taskId: 'roadmap-NEXT-5',
+    command: 'runner workflow',
+    logPath: 'logs/out.json',
+    writeScope: ['src']
+  });
+  const realRun = startRun(dryRun, {
+    runId: 'run-2',
+    targetId: 'admin-app',
+    taskId: 'roadmap-NEXT-5',
+    command: 'runner workflow -AllowReal',
+    logPath: 'logs/real-out.json',
+    writeScope: ['src/app'],
+    realExecution: {
+      mode: 'real',
+      allowReal: true,
+      confirmation: 'RUN REAL',
+      stepRunnerCommand: '.\\runner\\codex.ps1'
+    }
+  });
+
+  assert.equal(Object.hasOwn(dryRun.runs[0], 'realExecution'), false);
+  assert.deepEqual(realRun.runs[0].realExecution, {
+    mode: 'real',
+    allowReal: true,
+    confirmation: 'RUN REAL',
+    stepRunnerCommand: '.\\runner\\codex.ps1'
+  });
+});

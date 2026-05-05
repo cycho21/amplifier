@@ -245,6 +245,7 @@ test('executeWorkflowRequest captures dry-run command output into a UI result re
     assert.equal(written.output.execution.stderr, '');
     assert.match(written.output.execution.command, /runner\\workflow\.ps1/);
     assert.equal(written.output.execution.log_path, 'logs/operator-workflow-roadmap-NEXT-6-20260505T010203004Z.json');
+    assert.equal(Object.hasOwn(written.output.execution, 'real_metadata'), false);
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
   }
@@ -383,10 +384,34 @@ test('executeWorkflowRequest requires separate server confirmation for real mode
       }
     );
     const written = JSON.parse(await readFile(path.join(repoRoot, result.name), 'utf8'));
+    const runIndex = JSON.parse(await readFile(path.join(repoRoot, '.operator', 'runs.json'), 'utf8'));
 
     assert.match(written.output.execution.command, /-Mode "real"/);
     assert.match(written.output.execution.command, /-AllowReal/);
     assert.equal(written.output.execution.exit_code, 0);
+    assert.deepEqual(written.output.execution.real_metadata, {
+      mode: 'real',
+      allow_real: true,
+      confirmation: 'RUN REAL',
+      target_id: 'default',
+      workflow_spec: 'workflows/implementation-review.yaml',
+      step_runner_command: '.\\runner\\codex.ps1',
+      write_scope: {
+        policy: 'repo-relative-prefix',
+        paths: ['.']
+      }
+    });
+    assert.deepEqual(runIndex.runs[0].realExecution, {
+      mode: 'real',
+      allowReal: true,
+      confirmation: 'RUN REAL',
+      workflowSpec: 'workflows/implementation-review.yaml',
+      stepRunnerCommand: '.\\runner\\codex.ps1',
+      writeScope: {
+        policy: 'repo-relative-prefix',
+        paths: ['.']
+      }
+    });
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
   }

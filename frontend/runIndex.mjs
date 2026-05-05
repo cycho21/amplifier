@@ -27,7 +27,8 @@ export function startRun(index, run) {
         finishedAt: '',
         logPath: normalizeRequired(run.logPath, 'Log path'),
         exitCode: null,
-        writeScope: normalizeWriteScope(run.writeScope?.paths || run.writeScope || ['.'])
+        writeScope: normalizeWriteScope(run.writeScope?.paths || run.writeScope || ['.']),
+        ...normalizeRealExecution(run.realExecution)
       },
       ...current.runs
     ]
@@ -71,7 +72,33 @@ function normalizeRunRecord(record) {
     finishedAt: String(record.finishedAt || ''),
     logPath: normalizeRequired(record.logPath, 'Log path'),
     exitCode: Number.isInteger(record.exitCode) ? record.exitCode : null,
-    writeScope: normalizeWriteScope(record.writeScope?.paths || record.writeScope || ['.'])
+    writeScope: normalizeWriteScope(record.writeScope?.paths || record.writeScope || ['.']),
+    ...normalizeRealExecution(record.realExecution)
+  };
+}
+
+function normalizeRealExecution(metadata) {
+  if (!metadata || typeof metadata !== 'object') {
+    return {};
+  }
+
+  const realExecution = {
+    mode: String(metadata.mode || 'real'),
+    allowReal: metadata.allowReal === true,
+    confirmation: String(metadata.confirmation || ''),
+    stepRunnerCommand: String(metadata.stepRunnerCommand || '')
+  };
+
+  if (metadata.workflowSpec) {
+    realExecution.workflowSpec = String(metadata.workflowSpec);
+  }
+
+  if (metadata.writeScope || metadata.writeScope?.paths) {
+    realExecution.writeScope = normalizeWriteScope(metadata.writeScope?.paths || metadata.writeScope);
+  }
+
+  return {
+    realExecution
   };
 }
 

@@ -138,15 +138,18 @@ export async function executeWorkflowRequest(repoRoot = defaultRepoRoot, input =
 
   const invoke = options.invoke || invokeWorkflowCommand;
   const recordRunId = `execution-record-${request.taskId}-${timestamp.replace(/[-:.]/g, '')}`;
+  const targetId = input.targetId || 'default';
+  const realExecutionMetadata = createRealExecutionMetadata(request, targetId);
   const runIndexPath = options.runIndexPath || path.join(operatorRoot, '.operator', 'runs.json');
   const runningIndex = startRun(await readRunIndex(runIndexPath), {
     runId: recordRunId,
-    targetId: input.targetId || 'default',
+    targetId,
     taskId: request.taskId,
     command: request.command,
     logPath: request.logOut,
     writeScope: request.writeScope,
-    startedAt: timestamp
+    startedAt: timestamp,
+    ...(realExecutionMetadata ? { realExecution: realExecutionMetadata.runIndex } : {})
   });
   await writeRunIndex(runIndexPath, runningIndex);
 
@@ -201,7 +204,8 @@ export async function executeWorkflowRequest(repoRoot = defaultRepoRoot, input =
         stderr: result.stderr,
         exit_code: result.exitCode,
         log_path: request.logOut,
-        write_scope: request.writeScope
+        write_scope: request.writeScope,
+        ...(realExecutionMetadata ? { real_metadata: realExecutionMetadata.log } : {})
       }
     }
   };
@@ -212,6 +216,32 @@ export async function executeWorkflowRequest(repoRoot = defaultRepoRoot, input =
   return {
     name: recordName,
     content: `${JSON.stringify(record, null, 2)}\n`
+  };
+}
+
+function createRealExecutionMetadata(request, targetId) {
+  if (request.mode !== 'real') {
+    return null;
+  }
+
+  return {
+    runIndex: {
+      mode: 'real',
+      allowReal: request.allowReal === true,
+      confirmation: 'RUN REAL',
+      workflowSpec: request.workflowSpec,
+      stepRunnerCommand: request.stepRunnerCommand,
+      writeScope: request.writeScope
+    },
+    log: {
+      mode: 'real',
+      allow_real: request.allowReal === true,
+      confirmation: 'RUN REAL',
+      target_id: targetId,
+      workflow_spec: request.workflowSpec,
+      step_runner_command: request.stepRunnerCommand,
+      write_scope: request.writeScope
+    }
   };
 }
 
