@@ -1,8 +1,10 @@
 import { createServer } from 'node:http';
+import { spawn } from 'node:child_process';
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { createWorkflowExecutionRequest } from './executionRequest.mjs';
 import { parseRoadmapFile } from './roadmapParser.mjs';
 
 const frontendDir = path.dirname(fileURLToPath(import.meta.url));
@@ -98,6 +100,126 @@ export async function runRoadmapItem(repoRoot = defaultRepoRoot, request = {}) {
     name: logName,
     content: `${JSON.stringify(log, null, 2)}\n`
   };
+}
+
+export async function executeWorkflowRequest(repoRoot = defaultRepoRoot, input = {}, options = {}) {
+  if (input.confirmed !== true) {
+    throw new Error('Execution confirmation is required before invoking a local runner command.');
+  }
+
+  const request = createWorkflowExecutionRequest(input, {
+    timestamp: options.timestamp
+  });
+  await assertExecutionInputFiles(repoRoot, request);
+
+  const invoke = options.invoke || invokeWorkflowCommand;
+  const result = await invoke(repoRoot, request);
+  const timestamp = options.timestamp || new Date().toISOString();
+  const recordName = toBrowserPath(path.join(
+    'logs',
+    `execution-record-${request.taskId}-${timestamp.replace(/[-:.]/g, '')}.json`
+  ));
+  const record = {
+    run_id: `execution-record-${request.taskId}-${timestamp.replace(/[-:.]/g, '')}`,
+    runner: 'operator-ui-execution',
+    role: 'operator-control',
+    task_id: request.taskId,
+    inputs: [
+      request.workflowSpec,
+      `tasks/${request.taskId}.md`,
+      'runner/workflow.ps1',
+      request.stepRunnerCommand.replace(/\\/g, '/').replace(/^\.\//, '')
+    ],
+    output: {
+      summary: result.exitCode === 0
+        ? 'Dry-run workflow command completed.'
+        : 'Dry-run workflow command failed.',
+      changed_files: [request.logOut],
+      verification_result: `exit ${result.exitCode}`,
+      risks: result.exitCode === 0 ? [] : ['The dry-run workflow command exited with a non-zero code.'],
+      next_steps: result.exitCode === 0
+        ? ['Inspect the generated workflow log in Runs.']
+        : ['Inspect stdout and stderr before retrying the dry-run workflow.'],
+      execution: {
+        command: request.command,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exit_code: result.exitCode,
+        log_path: request.logOut
+      }
+    }
+  };
+
+  await mkdir(path.join(repoRoot, 'logs'), { recursive: true });
+  await writeFile(path.join(repoRoot, recordName), `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+
+  return {
+    name: recordName,
+    content: `${JSON.stringify(record, null, 2)}\n`
+  };
+}
+
+async function assertExecutionInputFiles(repoRoot, request) {
+  const requiredPaths = [
+    request.workflowSpec,
+    `tasks/${request.taskId}.md`,
+    'runner/workflow.ps1',
+    request.stepRunnerCommand.replace(/\\/g, '/').replace(/^\.\//, '')
+  ];
+
+  for (const fileName of requiredPaths) {
+    try {
+      const fileStat = await stat(path.join(repoRoot, fileName));
+
+      if (!fileStat.isFile()) {
+        throw new Error();
+      }
+    } catch (error) {
+      throw new Error(`Required execution input file not found: ${fileName}`);
+    }
+  }
+}
+
+function invokeWorkflowCommand(repoRoot, request) {
+  return new Promise((resolve) => {
+    const child = spawn(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        path.join(repoRoot, 'runner', 'workflow.ps1'),
+        '-WorkflowSpec',
+        request.workflowSpec,
+        '-TaskId',
+        request.taskId,
+        '-Mode',
+        request.mode,
+        '-StepRunnerCommand',
+        request.stepRunnerCommand,
+        '-LogOut',
+        request.logOut
+      ],
+      { cwd: repoRoot }
+    );
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('error', (error) => {
+      stderr += error.message;
+      resolve({ stdout, stderr, exitCode: 1 });
+    });
+    child.on('close', (code) => {
+      resolve({ stdout, stderr, exitCode: code ?? 1 });
+    });
+  });
 }
 
 function formatRoadmapTaskDraft(taskId, goal, roadmapFile, itemNumber) {
@@ -219,6 +341,18 @@ export function createOperatorServer(options = {}) {
 
         const body = await readJsonRequest(request);
         await sendJson(response, await runRoadmapItem(repoRoot, body));
+        return;
+      }
+
+      if (url.pathname === '/api/executions/run') {
+        if (request.method !== 'POST') {
+          response.writeHead(405);
+          response.end('Method not allowed');
+          return;
+        }
+
+        const body = await readJsonRequest(request);
+        await sendJson(response, await executeWorkflowRequest(repoRoot, body));
         return;
       }
 

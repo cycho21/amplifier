@@ -118,6 +118,47 @@ Validate before save.</textarea>
         </article>
       </dialog>
 
+      <details class="execution-control collapsible-section" open>
+        <summary class="collapsible-heading">
+          <span>Workflow Execution</span>
+          <span class="collapse-hint">Toggle</span>
+        </summary>
+        <form id="workflow-execution-form" class="execution-form">
+          <label>
+            <span>Task ID</span>
+            <input name="taskId" type="text" value="000_template">
+          </label>
+          <label>
+            <span>Workflow Spec</span>
+            <input name="workflowSpec" type="text" value="workflows/implementation-review.yaml">
+          </label>
+          <label>
+            <span>Mode</span>
+            <select name="mode">
+              <option value="dry-run">dry-run</option>
+              <option value="real" disabled>real blocked</option>
+            </select>
+          </label>
+          <label>
+            <span>Step Runner</span>
+            <input name="stepRunnerCommand" type="text" value="runner/codex.ps1">
+          </label>
+          <label>
+            <span>Log Output</span>
+            <input name="logOut" type="text" placeholder="Generated automatically">
+          </label>
+          <div class="execution-command">
+            <span class="metric-label">Command</span>
+            <pre id="workflow-command-preview"></pre>
+          </div>
+          <p class="blocked-note">Real execution is blocked for this roadmap; `-Mode real` and `-AllowReal` are not available here.</p>
+          <div class="draft-actions">
+            <p id="workflow-execution-status" class="muted compact-line" aria-live="polite">Ready.</p>
+            <button id="workflow-execute" class="open-button" type="submit">Run dry-run workflow</button>
+          </div>
+        </form>
+      </details>
+
       <details class="roadmap-dashboard collapsible-section" open>
         <summary class="collapsible-heading">
           <span>Roadmaps</span>

@@ -40,6 +40,7 @@ export function parseLogFile(fileName, content) {
       failedSteps: arrayOfObjects(output.failed_steps).map(normalizeFailedStep),
       cancelledSteps: arrayOfObjects(output.cancelled_steps).map(normalizeOperationalStep),
       skippedSteps: arrayOfObjects(output.skipped_steps).map(normalizeOperationalStep),
+      execution: normalizeExecution(output.execution),
       cost,
       costTotal: cost.estimatedTotalCost,
       costTracking: isObject(output.cost_tracking) ? output.cost_tracking : null,
@@ -146,6 +147,20 @@ function normalizeWorkflowCost(costTracking) {
     stepCosts: arrayOfObjects(costTracking.step_costs).map((stepCost) =>
       normalizeStepCost(stepCost, stepCost.step_id, stepCost.role)
     )
+  };
+}
+
+function normalizeExecution(execution) {
+  if (!isObject(execution)) {
+    return null;
+  }
+
+  return {
+    command: stringOrFallback(execution.command, ''),
+    stdout: stringOrFallback(execution.stdout, ''),
+    stderr: stringOrFallback(execution.stderr, ''),
+    exitCode: numberOrNull(execution.exit_code),
+    logPath: stringOrFallback(execution.log_path, '')
   };
 }
 

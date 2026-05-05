@@ -4,7 +4,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { readLogFiles, readRoadmapFiles, runRoadmapItem, saveRoadmapFile } from './server.mjs';
+import {
+  executeWorkflowRequest,
+  readLogFiles,
+  readRoadmapFiles,
+  runRoadmapItem,
+  saveRoadmapFile
+} from './server.mjs';
 
 test('readLogFiles reads top-level JSON logs from the repo logs folder', async () => {
   const repoRoot = await mkdtemp(path.join(tmpdir(), 'operator-server-'));
@@ -133,6 +139,122 @@ test('runRoadmapItem writes a dry-run log for a selected roadmap item', async ()
     assert.match(task, /## Task ID\n\n`roadmap-NEXT-2`/);
     assert.match(task, /## Goal\n\nAdd roadmap run controls\./);
     assert.match(task, /- `docs\/plan\/roadmaps\/NEXT.md`/);
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test('executeWorkflowRequest captures dry-run command output into a UI result record', async () => {
+  const repoRoot = await mkdtemp(path.join(tmpdir(), 'operator-server-'));
+
+  try {
+    await mkdir(path.join(repoRoot, 'tasks'), { recursive: true });
+    await mkdir(path.join(repoRoot, 'workflows'), { recursive: true });
+    await mkdir(path.join(repoRoot, 'runner'), { recursive: true });
+    await writeFile(path.join(repoRoot, 'tasks', 'roadmap-NEXT-6.md'), '# Task\n');
+    await writeFile(path.join(repoRoot, 'workflows', 'implementation-review.yaml'), 'workflow: implementation-review\n');
+    await writeFile(path.join(repoRoot, 'runner', 'workflow.ps1'), '# workflow\n');
+    await writeFile(path.join(repoRoot, 'runner', 'codex.ps1'), '# codex\n');
+
+    const result = await executeWorkflowRequest(
+      repoRoot,
+      {
+        confirmed: true,
+        taskId: 'roadmap-NEXT-6',
+        workflowSpec: 'workflows/implementation-review.yaml',
+        mode: 'dry-run',
+        stepRunnerCommand: 'runner/codex.ps1'
+      },
+      {
+        timestamp: '2026-05-05T01:02:03.004Z',
+        invoke: async () => ({
+          stdout: 'Prompt written\nLog written\n',
+          stderr: '',
+          exitCode: 0
+        })
+      }
+    );
+    const written = JSON.parse(await readFile(path.join(repoRoot, result.name), 'utf8'));
+
+    assert.equal(result.name, 'logs/execution-record-roadmap-NEXT-6-20260505T010203004Z.json');
+    assert.equal(written.runner, 'operator-ui-execution');
+    assert.equal(written.task_id, 'roadmap-NEXT-6');
+    assert.equal(written.output.verification_result, 'exit 0');
+    assert.equal(written.output.execution.exit_code, 0);
+    assert.equal(written.output.execution.stdout, 'Prompt written\nLog written\n');
+    assert.equal(written.output.execution.stderr, '');
+    assert.match(written.output.execution.command, /runner\\workflow\.ps1/);
+    assert.equal(written.output.execution.log_path, 'logs/operator-workflow-roadmap-NEXT-6-20260505T010203004Z.json');
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test('executeWorkflowRequest rejects cancelled confirmation, real mode, invalid paths, and missing runner prerequisites', async () => {
+  const repoRoot = await mkdtemp(path.join(tmpdir(), 'operator-server-'));
+
+  try {
+    await assert.rejects(
+      executeWorkflowRequest(repoRoot, { taskId: 'roadmap-NEXT-6' }),
+      /Execution confirmation is required/
+    );
+    await assert.rejects(
+      executeWorkflowRequest(repoRoot, { confirmed: true, taskId: 'roadmap-NEXT-6', mode: 'real' }),
+      /Only dry-run workflow execution/
+    );
+    await assert.rejects(
+      executeWorkflowRequest(repoRoot, {
+        confirmed: true,
+        taskId: 'roadmap-NEXT-6',
+        workflowSpec: '../workflow.yaml'
+      }),
+      /Workflow spec/
+    );
+    await assert.rejects(
+      executeWorkflowRequest(repoRoot, { confirmed: true, taskId: 'roadmap-NEXT-6' }),
+      /Required execution input file not found/
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test('executeWorkflowRequest records failed dry-run command output', async () => {
+  const repoRoot = await mkdtemp(path.join(tmpdir(), 'operator-server-'));
+
+  try {
+    await mkdir(path.join(repoRoot, 'tasks'), { recursive: true });
+    await mkdir(path.join(repoRoot, 'workflows'), { recursive: true });
+    await mkdir(path.join(repoRoot, 'runner'), { recursive: true });
+    await writeFile(path.join(repoRoot, 'tasks', 'roadmap-NEXT-8.md'), '# Task\n');
+    await writeFile(path.join(repoRoot, 'workflows', 'implementation-review.yaml'), 'workflow: implementation-review\n');
+    await writeFile(path.join(repoRoot, 'runner', 'workflow.ps1'), '# workflow\n');
+    await writeFile(path.join(repoRoot, 'runner', 'codex.ps1'), '# codex\n');
+
+    const result = await executeWorkflowRequest(
+      repoRoot,
+      {
+        confirmed: true,
+        taskId: 'roadmap-NEXT-8',
+        workflowSpec: 'workflows/implementation-review.yaml',
+        mode: 'dry-run',
+        stepRunnerCommand: 'runner/codex.ps1'
+      },
+      {
+        timestamp: '2026-05-05T02:03:04.005Z',
+        invoke: async () => ({
+          stdout: '',
+          stderr: 'missing prerequisite',
+          exitCode: 1
+        })
+      }
+    );
+    const written = JSON.parse(await readFile(path.join(repoRoot, result.name), 'utf8'));
+
+    assert.equal(written.output.summary, 'Dry-run workflow command failed.');
+    assert.equal(written.output.verification_result, 'exit 1');
+    assert.deepEqual(written.output.risks, ['The dry-run workflow command exited with a non-zero code.']);
+    assert.equal(written.output.execution.stderr, 'missing prerequisite');
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
   }

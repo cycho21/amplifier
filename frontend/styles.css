@@ -503,7 +503,19 @@ textarea {
   background: #ffffff;
 }
 
+.execution-control {
+  background: #ffffff;
+}
+
 .draft-form {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  max-inline-size: 980px;
+  padding: 0 20px 20px;
+}
+
+.execution-form {
   display: grid;
   align-content: start;
   gap: 12px;
@@ -519,9 +531,19 @@ textarea {
   font-weight: 700;
 }
 
+.execution-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .draft-form input,
 .draft-form select,
-.draft-form textarea {
+.draft-form textarea,
+.execution-form input,
+.execution-form select {
   inline-size: 100%;
   min-inline-size: 0;
   padding: 9px 10px;
@@ -534,6 +556,40 @@ textarea {
 
 .draft-form textarea {
   resize: vertical;
+}
+
+.execution-command {
+  display: grid;
+  gap: 6px;
+}
+
+.execution-command pre,
+.execution-stream pre {
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f7f8fa;
+  font: 12px/1.5 Consolas, Monaco, monospace;
+  white-space: pre-wrap;
+}
+
+.blocked-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.execution-result {
+  display: grid;
+  gap: 8px;
+}
+
+.execution-stream {
+  display: grid;
+  gap: 4px;
+  min-inline-size: 0;
 }
 
 .draft-actions {

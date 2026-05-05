@@ -7,7 +7,7 @@ launching explicit dry-run workflow executions from the local UI.
 
 ## Status
 
-In progress.
+Completed.
 
 ## Principles
 
@@ -33,18 +33,18 @@ In progress.
 4. [x] Add markdown preview and export for roadmap drafts.
 5. [x] Add an explicit local save control for roadmap drafts under
    `docs/plan/roadmaps/`, guarded by validation and confirmation.
-6. [ ] Add a workflow execution request model that binds task id, workflow spec,
+6. [x] Add a workflow execution request model that binds task id, workflow spec,
    mode, step runner command, and log output path.
-7. [ ] Add tests for execution request validation and command construction.
-8. [ ] Add a dry-run-only execution panel that can invoke `runner/workflow.ps1`
+7. [x] Add tests for execution request validation and command construction.
+8. [x] Add a dry-run-only execution panel that can invoke `runner/workflow.ps1`
    after explicit confirmation.
-9. [ ] Capture execution stdout, stderr, exit code, command, and log path into a
+9. [x] Capture execution stdout, stderr, exit code, command, and log path into a
    local UI result record.
-10. [ ] Link completed execution records back into the existing log inspector and
+10. [x] Link completed execution records back into the existing log inspector and
     verification panel.
-11. [ ] Add blocked controls and UI copy for real execution, explaining that
+11. [x] Add blocked controls and UI copy for real execution, explaining that
     `-Mode real` and `-AllowReal` remain out of scope for this roadmap.
-12. [ ] Add tests for failed command handling, cancelled confirmation, invalid
+12. [x] Add tests for failed command handling, cancelled confirmation, invalid
     paths, and missing runner prerequisites.
 
 ## Acceptance Criteria

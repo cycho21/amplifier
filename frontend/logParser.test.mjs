@@ -116,6 +116,38 @@ test('summarizeRuns reports an empty state when no log files are loaded', () => 
   assert.equal(summary.emptyMessage, 'No logs loaded.');
 });
 
+test('parseLogFile normalizes operator execution result records', () => {
+  const content = JSON.stringify({
+    run_id: 'execution-record-roadmap-NEXT-6',
+    runner: 'operator-ui-execution',
+    role: 'operator-control',
+    task_id: 'roadmap-NEXT-6',
+    output: {
+      verification_result: 'exit 0',
+      risks: [],
+      next_steps: ['Inspect the generated workflow log in Runs.'],
+      execution: {
+        command: '.\\runner\\workflow.ps1 -Mode "dry-run"',
+        stdout: 'Prompt written\nLog written\n',
+        stderr: '',
+        exit_code: 0,
+        log_path: 'logs/operator-workflow-roadmap-NEXT-6.json'
+      }
+    }
+  });
+
+  const result = parseLogFile('execution-record.json', content);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.run.execution, {
+    command: '.\\runner\\workflow.ps1 -Mode "dry-run"',
+    stdout: 'Prompt written\nLog written\n',
+    stderr: '',
+    exitCode: 0,
+    logPath: 'logs/operator-workflow-roadmap-NEXT-6.json'
+  });
+});
+
 test('parseLogFile normalizes retry exhaustion, cancelled steps, and skipped steps', () => {
   const content = JSON.stringify({
     run_id: '20260426-workflow-real-failed-000_template',

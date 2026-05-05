@@ -1,4 +1,5 @@
 import { summarizeRuns } from './logParser.mjs';
+import { createWorkflowExecutionRequest } from './executionRequest.mjs';
 import {
   createRoadmapDraftExport,
   createRoadmapDraftFromFormData,
@@ -9,6 +10,10 @@ import { summarizeRoadmaps } from './roadmapParser.mjs';
 
 const refreshButton = document.querySelector('#refresh-data');
 const roadmapDraftForm = document.querySelector('#roadmap-draft-form');
+const workflowExecutionForm = document.querySelector('#workflow-execution-form');
+const workflowCommandPreview = document.querySelector('#workflow-command-preview');
+const workflowExecutionStatus = document.querySelector('#workflow-execution-status');
+const workflowExecuteButton = document.querySelector('#workflow-execute');
 const roadmapReviewModal = document.querySelector('#roadmap-review-modal');
 const roadmapReviewClose = document.querySelector('#roadmap-review-close');
 const roadmapReviewBody = document.querySelector('#roadmap-review-body');
@@ -30,7 +35,10 @@ let editingRoadmapName = null;
 
 refreshButton.addEventListener('click', loadLocalData);
 roadmapDraftForm.addEventListener('submit', createLocalRoadmapDraft);
+workflowExecutionForm.addEventListener('input', renderWorkflowCommandPreview);
+workflowExecutionForm.addEventListener('submit', executeWorkflowDryRun);
 roadmapReviewClose.addEventListener('click', () => roadmapReviewModal.close());
+renderWorkflowCommandPreview();
 loadLocalData();
 
 async function loadLocalData() {
@@ -56,10 +64,93 @@ async function fetchJson(path, options) {
   const response = await fetch(path, options);
 
   if (!response.ok) {
-    throw new Error(`${path} returned ${response.status}`);
+    let message = `${path} returned ${response.status}`;
+
+    try {
+      const body = await response.json();
+
+      if (body && typeof body.error === 'string') {
+        message = body.error;
+      }
+    } catch (error) {
+      // Keep the status-based fallback when the response is not JSON.
+    }
+
+    throw new Error(message);
   }
 
   return response.json();
+}
+
+function readWorkflowExecutionRequest() {
+  const formData = new FormData(workflowExecutionForm);
+  const request = {
+    taskId: String(formData.get('taskId') || ''),
+    workflowSpec: String(formData.get('workflowSpec') || ''),
+    mode: String(formData.get('mode') || ''),
+    stepRunnerCommand: String(formData.get('stepRunnerCommand') || '')
+  };
+  const logOut = String(formData.get('logOut') || '').trim();
+
+  if (logOut.length > 0) {
+    request.logOut = logOut;
+  }
+
+  return request;
+}
+
+function renderWorkflowCommandPreview() {
+  try {
+    const request = createWorkflowExecutionRequest(readWorkflowExecutionRequest());
+    workflowCommandPreview.textContent = request.command;
+    workflowExecutionStatus.textContent = 'Ready.';
+    workflowExecuteButton.disabled = false;
+  } catch (error) {
+    workflowCommandPreview.textContent = '';
+    workflowExecutionStatus.textContent = error.message;
+    workflowExecuteButton.disabled = true;
+  }
+}
+
+async function executeWorkflowDryRun(event) {
+  event.preventDefault();
+
+  let request;
+
+  try {
+    request = createWorkflowExecutionRequest(readWorkflowExecutionRequest());
+  } catch (error) {
+    workflowExecutionStatus.textContent = error.message;
+    return;
+  }
+
+  if (!window.confirm(`Run this dry-run workflow command?\n\n${request.command}`)) {
+    workflowExecutionStatus.textContent = 'Execution cancelled.';
+    return;
+  }
+
+  workflowExecuteButton.disabled = true;
+  workflowExecutionStatus.textContent = 'Running dry-run workflow...';
+
+  try {
+    const result = await fetchJson('/api/executions/run', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        ...request,
+        confirmed: true
+      })
+    });
+    workflowExecutionStatus.textContent = `Execution record written: ${result.name}`;
+    await loadLocalData();
+    selectRunByFileName(result.name);
+  } catch (error) {
+    workflowExecutionStatus.textContent = error.message;
+  } finally {
+    workflowExecuteButton.disabled = false;
+  }
 }
 
 function renderLogSummary(summary) {
@@ -543,10 +634,19 @@ function selectRun(index) {
     renderCostTracking(run),
     renderMemoryState(run),
     renderVerificationPanel(run),
+    renderExecutionResult(run),
     renderTextList('Risks', run.risks),
     renderTextList('Next steps', run.nextSteps),
     renderSteps(run.steps)
   );
+}
+
+function selectRunByFileName(fileName) {
+  const index = currentRuns.findIndex((run) => run.fileName === fileName);
+
+  if (index >= 0) {
+    selectRun(index);
+  }
 }
 
 function clearInspector() {
@@ -711,6 +811,50 @@ function renderVerificationEvidence(evidence) {
 
   item.append(header, command, result);
   return item;
+}
+
+function renderExecutionResult(run) {
+  const section = document.createElement('section');
+  section.className = 'detail-section';
+  const heading = document.createElement('h3');
+  heading.textContent = 'Execution result';
+
+  if (!run.execution) {
+    section.append(heading, renderMutedLine('No execution result in this captured log.'));
+    return section;
+  }
+
+  const panel = document.createElement('div');
+  panel.className = 'execution-result';
+  panel.append(
+    renderExecutionLine('Command', run.execution.command),
+    renderExecutionLine('Log path', run.execution.logPath),
+    renderExecutionLine('Exit code', String(run.execution.exitCode ?? 'n/a')),
+    renderExecutionBlock('stdout', run.execution.stdout),
+    renderExecutionBlock('stderr', run.execution.stderr)
+  );
+
+  section.append(heading, panel);
+  return section;
+}
+
+function renderExecutionLine(label, value) {
+  const row = document.createElement('p');
+  row.className = 'muted compact-line';
+  row.textContent = `${label}: ${value || 'None'}`;
+  return row;
+}
+
+function renderExecutionBlock(label, value) {
+  const block = document.createElement('div');
+  block.className = 'execution-stream';
+  const title = document.createElement('span');
+  title.className = 'metric-label';
+  title.textContent = label;
+  const output = document.createElement('pre');
+  output.textContent = value || 'None';
+  block.append(title, output);
+  return block;
 }
 
 function renderMemorySummary(memory) {
