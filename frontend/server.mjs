@@ -181,6 +181,7 @@ export async function executeWorkflowRequest(repoRoot = defaultRepoRoot, input =
     'logs',
     `${recordRunId}.json`
   ));
+  const executionMessage = formatExecutionRecordMessage(request.mode, result.exitCode);
   const record = {
     run_id: recordRunId,
     runner: 'operator-ui-execution',
@@ -193,15 +194,11 @@ export async function executeWorkflowRequest(repoRoot = defaultRepoRoot, input =
       request.stepRunnerCommand.replace(/\\/g, '/').replace(/^\.\//, '')
     ],
     output: {
-      summary: result.exitCode === 0
-        ? 'Dry-run workflow command completed.'
-        : 'Dry-run workflow command failed.',
+      summary: executionMessage.summary,
       changed_files: [request.logOut],
       verification_result: `exit ${result.exitCode}`,
-      risks: result.exitCode === 0 ? [] : ['The dry-run workflow command exited with a non-zero code.'],
-      next_steps: result.exitCode === 0
-        ? ['Inspect the generated workflow log in Runs.']
-        : ['Inspect stdout and stderr before retrying the dry-run workflow.'],
+      risks: executionMessage.risks,
+      next_steps: executionMessage.nextSteps,
       execution: {
         command: request.command,
         stdout: result.stdout,
@@ -220,6 +217,26 @@ export async function executeWorkflowRequest(repoRoot = defaultRepoRoot, input =
   return {
     name: recordName,
     content: `${JSON.stringify(record, null, 2)}\n`
+  };
+}
+
+function formatExecutionRecordMessage(mode, exitCode) {
+  const real = mode === 'real';
+  const label = real ? 'Real' : 'Dry-run';
+  const lowerLabel = real ? 'real' : 'dry-run';
+
+  if (exitCode === 0) {
+    return {
+      summary: `${label} workflow command completed.`,
+      risks: [],
+      nextSteps: ['Inspect the generated workflow log in Runs.']
+    };
+  }
+
+  return {
+    summary: `${label} workflow command failed.`,
+    risks: [`The ${lowerLabel} workflow command exited with a non-zero code.`],
+    nextSteps: [`Inspect stdout and stderr before retrying the ${lowerLabel} workflow.`]
   };
 }
 
@@ -274,30 +291,37 @@ async function assertExecutionInputFiles(operatorRoot, targetRoot, request) {
 }
 
 function invokeWorkflowCommand(roots, request) {
+  const stepRunnerCommand = resolveOperatorRunnerPath(roots.operatorRoot, request.stepRunnerCommand);
+  const args = [
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    path.join(roots.operatorRoot, 'runner', 'workflow.ps1'),
+    '-WorkflowSpec',
+    request.workflowSpec,
+    '-TaskId',
+    request.taskId,
+    '-Mode',
+    request.mode,
+    '-StepRunnerCommand',
+    stepRunnerCommand,
+    '-LogOut',
+    request.logOut,
+    '-OperatorRoot',
+    roots.operatorRoot,
+    '-TargetRoot',
+    roots.targetRoot
+  ];
+
+  if (request.allowReal === true) {
+    args.push('-AllowReal');
+  }
+
   return new Promise((resolve) => {
     const child = spawn(
       'powershell.exe',
-      [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        path.join(roots.operatorRoot, 'runner', 'workflow.ps1'),
-        '-WorkflowSpec',
-        request.workflowSpec,
-        '-TaskId',
-        request.taskId,
-        '-Mode',
-        request.mode,
-        '-StepRunnerCommand',
-        request.stepRunnerCommand,
-        '-LogOut',
-        request.logOut,
-        '-OperatorRoot',
-        roots.operatorRoot,
-        '-TargetRoot',
-        roots.targetRoot
-      ],
+      args,
       { cwd: roots.targetRoot }
     );
     let stdout = '';
@@ -317,6 +341,11 @@ function invokeWorkflowCommand(roots, request) {
       resolve({ stdout, stderr, exitCode: code ?? 1 });
     });
   });
+}
+
+function resolveOperatorRunnerPath(operatorRoot, stepRunnerCommand) {
+  const normalized = stepRunnerCommand.replace(/\\/g, '/').replace(/^\.\//, '');
+  return path.join(operatorRoot, normalized);
 }
 
 export async function readTargetRegistry(operatorRoot = defaultRepoRoot) {

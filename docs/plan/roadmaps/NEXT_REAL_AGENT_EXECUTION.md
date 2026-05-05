@@ -8,7 +8,7 @@ safety boundaries.
 
 ## Status
 
-In progress.
+Completed.
 
 ## Principles
 
@@ -35,7 +35,7 @@ In progress.
 6. [x] Add UI states for real running, real failed, and real completed records.
 7. [x] Add tests proving real mode remains blocked without explicit opt-in at
    model, server, and UI-adjacent layers.
-8. [ ] Dogfood with a controlled fake real runner before allowing Codex real
+8. [x] Dogfood with a controlled fake real runner before allowing Codex real
    invocation from the UI.
 
 ## Acceptance Criteria

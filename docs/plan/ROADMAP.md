@@ -25,8 +25,8 @@ Completed work includes:
   roadmap progress, and captured verification evidence.
 
 The project now has a stable runner and workflow core plus a local operator UI
-with guarded roadmap authoring and dry-run execution controls. The next roadmap
-is guarded real agent execution from the Operator UI.
+with guarded roadmap authoring, dry-run execution controls, and explicitly
+guarded real execution controls.
 
 ## Roadmap Files
 
@@ -45,8 +45,8 @@ Read in this order:
    verification evidence.
 6. [Operator Control](roadmaps/NEXT_OPERATOR_CONTROL.md): completed guarded local
    authoring and execution controls for roadmaps and dry-run workflows.
-7. [Next: Real Agent Execution](roadmaps/NEXT_REAL_AGENT_EXECUTION.md): guarded
-   real execution controls for explicit, auditable Operator UI runs.
+7. [Real Agent Execution](roadmaps/NEXT_REAL_AGENT_EXECUTION.md): completed
+   guarded real execution controls for explicit, auditable Operator UI runs.
 
 ## High-Level Progress
 
@@ -56,7 +56,7 @@ Read in this order:
 - [x] Operations roadmap.
 - [x] Operator UI roadmap.
 - [x] Operator Control roadmap.
-- [ ] Real Agent Execution roadmap.
+- [x] Real Agent Execution roadmap.
 
 ## Rule For Future Roadmaps
 

@@ -500,6 +500,49 @@ test('executeWorkflowRequest does not invoke real runner when server opt-in is i
   }
 });
 
+test('executeWorkflowRequest dogfoods real mode with controlled fake runner', async () => {
+  const targetRoot = await mkdtemp(path.join(tmpdir(), 'operator-target-'));
+
+  try {
+    await mkdir(path.join(targetRoot, 'tasks'), { recursive: true });
+    await writeFile(path.join(targetRoot, 'tasks', 'roadmap-NEXT-8.md'), '# Fake real dogfood\n');
+
+    const result = await executeWorkflowRequest(
+      targetRoot,
+      {
+        confirmed: true,
+        realExecutionConfirmed: true,
+        targetId: 'fake-real-target',
+        taskId: 'roadmap-NEXT-8',
+        workflowSpec: 'workflows/parallel-review.yaml',
+        mode: 'real',
+        stepRunnerCommand: 'runner/fake-real.ps1',
+        allowRealExecution: true,
+        realExecutionConfirmation: 'RUN REAL'
+      },
+      {
+        operatorRoot: defaultRepoRootForTest(),
+        runIndexPath: path.join(targetRoot, '.operator', 'runs.json'),
+        timestamp: '2026-05-05T08:09:10.011Z'
+      }
+    );
+    const executionRecord = JSON.parse(await readFile(path.join(targetRoot, result.name), 'utf8'));
+    const workflowLog = JSON.parse((await readFile(
+      path.join(targetRoot, 'logs', 'operator-workflow-roadmap-NEXT-8-20260505T080910011Z.json'),
+      'utf8'
+    )).replace(/^\uFEFF/, ''));
+
+    assert.equal(executionRecord.output.execution.exit_code, 0);
+    assert.equal(executionRecord.output.summary, 'Real workflow command completed.');
+    assert.deepEqual(executionRecord.output.risks, []);
+    assert.equal(workflowLog.runner, 'workflow-real');
+    assert.equal(workflowLog.output.final_status, 'real-complete');
+    assert.equal(workflowLog.invocation.step_runner_command.endsWith('runner\\fake-real.ps1'), true);
+  } finally {
+    await rm(targetRoot, { recursive: true, force: true });
+  }
+});
+
 test('executeWorkflowRequest records failed dry-run command output', async () => {
   const repoRoot = await mkdtemp(path.join(tmpdir(), 'operator-server-'));
 
@@ -543,4 +586,8 @@ test('executeWorkflowRequest records failed dry-run command output', async () =>
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function defaultRepoRootForTest() {
+  return process.cwd();
 }
