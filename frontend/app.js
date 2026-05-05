@@ -8,6 +8,10 @@ import {
   validateRoadmapDraft
 } from './roadmapDraft.mjs';
 import { summarizeRoadmaps } from './roadmapParser.mjs';
+import {
+  createWorkflowPrefillFromRoadmapRun,
+  getGeneratedTaskFile
+} from './roadmapRunResult.mjs';
 
 const refreshButton = document.querySelector('#refresh-data');
 const targetSelect = document.querySelector('#target-select');
@@ -745,6 +749,7 @@ async function runRoadmapItem(fileName, itemIndex, button) {
         itemIndex
       })
     });
+    prefillWorkflowExecutionFromRoadmapRun(result);
     await loadLocalData();
     await openGeneratedTaskDraft(result);
   } catch (error) {
@@ -752,6 +757,18 @@ async function runRoadmapItem(fileName, itemIndex, button) {
   } finally {
     button.disabled = false;
   }
+}
+
+function prefillWorkflowExecutionFromRoadmapRun(runResult) {
+  const prefill = createWorkflowPrefillFromRoadmapRun(runResult);
+  workflowExecutionForm.elements.taskId.value = prefill.taskId;
+  workflowExecutionForm.elements.workflowSpec.value = prefill.workflowSpec;
+  workflowExecutionForm.elements.mode.value = prefill.mode;
+  workflowExecutionForm.elements.stepRunnerCommand.value = prefill.stepRunnerCommand;
+  workflowExecutionForm.elements.logOut.value = prefill.logOut;
+  workflowExecutionForm.elements.writeScope.value = prefill.writeScope;
+  renderWorkflowCommandPreview();
+  workflowExecutionStatus.textContent = `Ready to dry-run ${prefill.taskId}.`;
 }
 
 async function openGeneratedTaskDraft(runResult) {
@@ -766,15 +783,6 @@ async function openGeneratedTaskDraft(runResult) {
   );
 
   renderTaskDraftViewer(task);
-}
-
-function getGeneratedTaskFile(runResult) {
-  try {
-    const log = JSON.parse(runResult.content || '{}');
-    return log?.output?.roadmap_item?.task_file || '';
-  } catch (error) {
-    return '';
-  }
 }
 
 function renderTaskDraftViewer(task) {

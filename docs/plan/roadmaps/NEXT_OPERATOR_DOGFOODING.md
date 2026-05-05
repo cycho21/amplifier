@@ -26,7 +26,7 @@ In progress.
 
 1. [x] Add a roadmap-created task draft viewer so operators can inspect the
    generated `tasks/roadmap-*.md` file from the UI.
-2. [ ] After a Roadmap `Run`, prefill the Workflow Execution panel with the
+2. [x] After a Roadmap `Run`, prefill the Workflow Execution panel with the
    generated task id and dry-run defaults.
 3. [ ] Add a direct link from an execution record to the generated workflow log
    in the existing Runs inspector.
