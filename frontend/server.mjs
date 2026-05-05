@@ -38,6 +38,10 @@ export async function readTaskDraft(repoRoot = defaultRepoRoot, fileName) {
   };
 }
 
+export async function readExecutionRunIndex(operatorRoot = defaultRepoRoot) {
+  return readRunIndex(path.join(operatorRoot, '.operator', 'runs.json'));
+}
+
 export async function saveRoadmapFile(repoRoot = defaultRepoRoot, fileName, content) {
   const relativeName = normalizeRoadmapFileName(fileName);
   const filePath = path.join(repoRoot, relativeName);
@@ -552,6 +556,17 @@ export function createOperatorServer(options = {}) {
         const body = await readJsonRequest(request);
         const target = await resolveTarget(operatorRoot, body.targetId);
         await sendJson(response, await executeWorkflowRequest(target.path, body, { operatorRoot }));
+        return;
+      }
+
+      if (url.pathname === '/api/executions') {
+        if (request.method !== 'GET') {
+          response.writeHead(405);
+          response.end('Method not allowed');
+          return;
+        }
+
+        await sendJson(response, await readExecutionRunIndex(operatorRoot));
         return;
       }
 

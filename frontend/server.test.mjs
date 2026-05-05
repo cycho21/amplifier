@@ -6,6 +6,7 @@ import test from 'node:test';
 
 import {
   executeWorkflowRequest,
+  readExecutionRunIndex,
   readLogFiles,
   readRoadmapFiles,
   readTaskDraft,
@@ -246,6 +247,47 @@ test('executeWorkflowRequest captures dry-run command output into a UI result re
     assert.match(written.output.execution.command, /runner\\workflow\.ps1/);
     assert.equal(written.output.execution.log_path, 'logs/operator-workflow-roadmap-NEXT-6-20260505T010203004Z.json');
     assert.equal(Object.hasOwn(written.output.execution, 'real_metadata'), false);
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test('readExecutionRunIndex reads operator execution state for UI status labels', async () => {
+  const repoRoot = await mkdtemp(path.join(tmpdir(), 'operator-server-'));
+
+  try {
+    await mkdir(path.join(repoRoot, '.operator'), { recursive: true });
+    await writeFile(path.join(repoRoot, '.operator', 'runs.json'), JSON.stringify({
+      version: 1,
+      runs: [
+        {
+          runId: 'execution-record-roadmap-NEXT-6',
+          targetId: 'client-app',
+          taskId: 'roadmap-NEXT-6',
+          command: '.\\runner\\workflow.ps1 -Mode "real" -AllowReal',
+          status: 'running',
+          startedAt: '2026-05-05T01:02:03.004Z',
+          finishedAt: '',
+          logPath: 'logs/operator-workflow-roadmap-NEXT-6.json',
+          exitCode: null,
+          writeScope: {
+            policy: 'repo-relative-prefix',
+            paths: ['src']
+          },
+          realExecution: {
+            mode: 'real',
+            allowReal: true,
+            confirmation: 'RUN REAL',
+            stepRunnerCommand: '.\\runner\\codex.ps1'
+          }
+        }
+      ]
+    }));
+
+    const index = await readExecutionRunIndex(repoRoot);
+
+    assert.equal(index.runs[0].status, 'running');
+    assert.equal(index.runs[0].realExecution.mode, 'real');
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
   }

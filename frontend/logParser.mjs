@@ -160,7 +160,28 @@ function normalizeExecution(execution) {
     stdout: stringOrFallback(execution.stdout, ''),
     stderr: stringOrFallback(execution.stderr, ''),
     exitCode: numberOrNull(execution.exit_code),
-    logPath: stringOrFallback(execution.log_path, '')
+    logPath: stringOrFallback(execution.log_path, ''),
+    realMetadata: normalizeRealMetadata(execution.real_metadata)
+  };
+}
+
+function normalizeRealMetadata(metadata) {
+  if (!isObject(metadata)) {
+    return null;
+  }
+
+  return {
+    mode: stringOrFallback(metadata.mode, ''),
+    allowReal: metadata.allow_real === true,
+    targetId: stringOrFallback(metadata.target_id, ''),
+    writeScope: isObject(metadata.write_scope)
+      ? {
+          policy: stringOrFallback(metadata.write_scope.policy, ''),
+          paths: Array.isArray(metadata.write_scope.paths)
+            ? metadata.write_scope.paths.map((item) => stringOrFallback(item, '')).filter(Boolean)
+            : []
+        }
+      : null
   };
 }
 

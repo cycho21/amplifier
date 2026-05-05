@@ -1,14 +1,44 @@
-export function summarizeExecutionRequests(runs) {
-  return runs
-    .filter((run) => run.execution)
+export function summarizeExecutionRequests(runs, indexedRuns = []) {
+  const runningRequests = indexedRuns
+    .filter((run) => run.status === 'running')
     .map((run) => ({
-      fileName: run.fileName,
+      fileName: '',
       taskId: run.taskId,
-      command: run.execution.command,
-      logPath: run.execution.logPath,
-      exitCode: run.execution.exitCode,
-      status: run.verificationResult || formatExitStatus(run.execution.exitCode)
+      command: run.command,
+      logPath: run.logPath,
+      exitCode: run.exitCode,
+      mode: run.realExecution?.mode === 'real' ? 'real' : 'dry-run',
+      state: run.realExecution?.mode === 'real' ? 'real-running' : 'dry-run-running',
+      status: run.realExecution?.mode === 'real' ? 'real running' : 'dry-run running'
     }));
+  const recordRequests = runs
+    .filter((run) => run.execution)
+    .map((run) => summarizeExecutionRecord(run));
+
+  return [
+    ...runningRequests,
+    ...recordRequests
+  ];
+}
+
+function summarizeExecutionRecord(run) {
+  const request = {
+    fileName: run.fileName,
+    taskId: run.taskId,
+    command: run.execution.command,
+    logPath: run.execution.logPath,
+    exitCode: run.execution.exitCode,
+    status: run.verificationResult || formatExitStatus(run.execution.exitCode)
+  };
+
+  if (run.execution.realMetadata?.mode === 'real') {
+    const completed = run.execution.exitCode === 0;
+    request.mode = 'real';
+    request.state = completed ? 'real-completed' : 'real-failed';
+    request.status = completed ? 'real completed' : 'real failed';
+  }
+
+  return request;
 }
 
 export function getWorkflowLogReferenceState(executionRun, runs) {

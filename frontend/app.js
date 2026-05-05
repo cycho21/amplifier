@@ -48,6 +48,7 @@ const stepCount = document.querySelector('#step-count');
 const roadmapCount = document.querySelector('#roadmap-count');
 
 let currentRuns = [];
+let currentExecutionIndex = { runs: [] };
 let currentRoadmapDraftExport = null;
 let currentRoadmapFiles = [];
 let currentTargets = [];
@@ -76,12 +77,14 @@ async function loadLocalData() {
     renderTargetRegistry(targetRegistry);
 
     const targetQuery = `?targetId=${encodeURIComponent(currentTargetId)}`;
-    const [logFiles, roadmapFiles] = await Promise.all([
+    const [logFiles, roadmapFiles, executionIndex] = await Promise.all([
       fetchJson(`/api/logs${targetQuery}`),
-      fetchJson(`/api/roadmaps${targetQuery}`)
+      fetchJson(`/api/roadmaps${targetQuery}`),
+      fetchJson('/api/executions')
     ]);
 
     currentRoadmapFiles = roadmapFiles;
+    currentExecutionIndex = executionIndex;
     renderLogSummary(summarizeRuns(logFiles));
     renderRoadmapSummary(summarizeRoadmaps(roadmapFiles));
   } catch (error) {
@@ -357,7 +360,7 @@ function renderLogSummary(summary) {
   currentRuns = summary.runs;
   renderSummary(summary);
   renderRunList(summary.runs, summary.emptyMessage);
-  renderExecutionRequestList(summary.runs);
+  renderExecutionRequestList(summary.runs, currentExecutionIndex.runs || []);
   renderErrors(summary.errors);
 
   if (summary.runs.length > 0) {
@@ -897,8 +900,8 @@ function renderArtifactState(titleText, fileName, detailText) {
   showRoadmapReviewModal();
 }
 
-function renderExecutionRequestList(runs) {
-  const requests = summarizeExecutionRequests(runs);
+function renderExecutionRequestList(runs, indexedRuns = []) {
+  const requests = summarizeExecutionRequests(runs, indexedRuns);
   executionRequestList.replaceChildren();
   executionRequestList.classList.toggle('empty', requests.length === 0);
 
@@ -919,7 +922,9 @@ function renderExecutionRequestList(runs) {
     const title = document.createElement('strong');
     title.textContent = request.taskId;
     const badge = document.createElement('span');
-    badge.className = request.exitCode === 0 ? 'verification-badge passed' : 'verification-badge';
+    badge.className = request.exitCode === 0 || request.state === 'real-completed'
+      ? 'verification-badge passed'
+      : 'verification-badge';
     badge.textContent = request.status;
     header.append(title, badge);
 
@@ -936,7 +941,7 @@ function renderExecutionRequestList(runs) {
     const logState = getWorkflowLogReferenceState(run, runs);
     actions.append(renderWorkflowLogAction(logState));
 
-    if (request.exitCode !== 0 && run) {
+    if (request.exitCode !== 0 && request.state !== 'real-running' && run) {
       const retryButton = document.createElement('button');
       retryButton.type = 'button';
       retryButton.className = 'open-button secondary compact';

@@ -144,7 +144,49 @@ test('parseLogFile normalizes operator execution result records', () => {
     stdout: 'Prompt written\nLog written\n',
     stderr: '',
     exitCode: 0,
-    logPath: 'logs/operator-workflow-roadmap-NEXT-6.json'
+    logPath: 'logs/operator-workflow-roadmap-NEXT-6.json',
+    realMetadata: null
+  });
+});
+
+test('parseLogFile normalizes real execution metadata records', () => {
+  const content = JSON.stringify({
+    run_id: 'execution-record-roadmap-NEXT-6',
+    runner: 'operator-ui-execution',
+    role: 'operator-control',
+    task_id: 'roadmap-NEXT-6',
+    output: {
+      verification_result: 'exit 0',
+      execution: {
+        command: '.\\runner\\workflow.ps1 -Mode "real" -AllowReal',
+        stdout: '',
+        stderr: '',
+        exit_code: 0,
+        log_path: 'logs/operator-workflow-roadmap-NEXT-6.json',
+        real_metadata: {
+          mode: 'real',
+          allow_real: true,
+          target_id: 'client-app',
+          write_scope: {
+            policy: 'repo-relative-prefix',
+            paths: ['src/app']
+          }
+        }
+      }
+    }
+  });
+
+  const result = parseLogFile('execution-record.json', content);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.run.execution.realMetadata, {
+    mode: 'real',
+    allowReal: true,
+    targetId: 'client-app',
+    writeScope: {
+      policy: 'repo-relative-prefix',
+      paths: ['src/app']
+    }
   });
 });
 

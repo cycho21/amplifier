@@ -29,6 +29,62 @@ test('summarizeExecutionRequests keeps recent execution records with command met
   ]);
 });
 
+test('summarizeExecutionRequests labels real completed, failed, and running records', () => {
+  const summary = summarizeExecutionRequests([
+    executionRun({
+      fileName: 'logs/execution-record-roadmap-NEXT-5.json',
+      taskId: 'roadmap-NEXT-5',
+      mode: 'real',
+      exitCode: 0
+    }),
+    executionRun({
+      fileName: 'logs/execution-record-roadmap-NEXT-6.json',
+      taskId: 'roadmap-NEXT-6',
+      mode: 'real',
+      exitCode: 1
+    })
+  ], [
+    {
+      runId: 'execution-record-roadmap-NEXT-7',
+      targetId: 'client-app',
+      taskId: 'roadmap-NEXT-7',
+      command: '.\\runner\\workflow.ps1 -Mode "real" -AllowReal',
+      status: 'running',
+      logPath: 'logs/operator-workflow-roadmap-NEXT-7.json',
+      exitCode: null,
+      realExecution: {
+        mode: 'real'
+      }
+    }
+  ]);
+
+  assert.deepEqual(summary.map((request) => ({
+    taskId: request.taskId,
+    mode: request.mode,
+    state: request.state,
+    status: request.status
+  })), [
+    {
+      taskId: 'roadmap-NEXT-7',
+      mode: 'real',
+      state: 'real-running',
+      status: 'real running'
+    },
+    {
+      taskId: 'roadmap-NEXT-5',
+      mode: 'real',
+      state: 'real-completed',
+      status: 'real completed'
+    },
+    {
+      taskId: 'roadmap-NEXT-6',
+      mode: 'real',
+      state: 'real-failed',
+      status: 'real failed'
+    }
+  ]);
+});
+
 test('getWorkflowLogReferenceState reports ready, missing, and stale workflow log references', () => {
   const execution = executionRun({
     taskId: 'roadmap-NEXT-2',
@@ -94,17 +150,29 @@ test('createRetryPrefillFromExecutionRun reuses captured dry-run command fields 
 function executionRun(overrides = {}) {
   const taskId = overrides.taskId || 'roadmap-NEXT-2';
   const logPath = overrides.logPath || `logs/operator-workflow-${taskId}.json`;
+  const mode = overrides.mode || 'dry-run';
 
   return {
     fileName: overrides.fileName || `logs/execution-record-${taskId}.json`,
     taskId,
     verificationResult: `exit ${overrides.exitCode ?? 1}`,
     execution: {
-      command: `.\\runner\\workflow.ps1 -WorkflowSpec "workflows/implementation-review.yaml" -TaskId "${taskId}" -Mode "dry-run" -StepRunnerCommand ".\\runner\\codex.ps1" -LogOut "${logPath}"`,
+      command: `.\\runner\\workflow.ps1 -WorkflowSpec "workflows/implementation-review.yaml" -TaskId "${taskId}" -Mode "${mode}" -StepRunnerCommand ".\\runner\\codex.ps1" -LogOut "${logPath}"${mode === 'real' ? ' -AllowReal' : ''}`,
       stdout: '',
       stderr: '',
       exitCode: overrides.exitCode ?? 1,
-      logPath
+      logPath,
+      realMetadata: mode === 'real'
+        ? {
+            mode: 'real',
+            allowReal: true,
+            targetId: 'client-app',
+            writeScope: {
+              policy: 'repo-relative-prefix',
+              paths: ['src']
+            }
+          }
+        : null
     }
   };
 }
