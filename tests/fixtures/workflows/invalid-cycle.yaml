@@ -1,0 +1,22 @@
+workflow: invalid-cycle
+
+description: Test fixture for cycle detection (A → B → A)
+
+mode: sequential
+
+steps:
+  - id: A
+    role: test-role
+    agent_role: agents/implementer.md
+    execution_spec: execution/implementer.yaml
+    task_id: "000_template"
+    depends_on:
+      - B
+
+  - id: B
+    role: test-role
+    agent_role: agents/implementer.md
+    execution_spec: execution/implementer.yaml
+    task_id: "000_template"
+    depends_on:
+      - A
