@@ -1,5 +1,6 @@
 import { summarizeRuns } from './logParser.mjs';
 import { createWorkflowExecutionRequest } from './executionRequest.mjs';
+import { normalizeTargetId } from './targetRegistry.mjs';
 import {
   createRoadmapDraftExport,
   createRoadmapDraftFromFormData,
@@ -9,6 +10,10 @@ import {
 import { summarizeRoadmaps } from './roadmapParser.mjs';
 
 const refreshButton = document.querySelector('#refresh-data');
+const targetSelect = document.querySelector('#target-select');
+const targetStatus = document.querySelector('#target-status');
+const registerTargetButton = document.querySelector('#register-target');
+const initTargetButton = document.querySelector('#init-target');
 const roadmapDraftForm = document.querySelector('#roadmap-draft-form');
 const workflowExecutionForm = document.querySelector('#workflow-execution-form');
 const workflowCommandPreview = document.querySelector('#workflow-command-preview');
@@ -31,9 +36,17 @@ const roadmapCount = document.querySelector('#roadmap-count');
 let currentRuns = [];
 let currentRoadmapDraftExport = null;
 let currentRoadmapFiles = [];
+let currentTargets = [];
+let currentTargetId = '';
 let editingRoadmapName = null;
 
 refreshButton.addEventListener('click', loadLocalData);
+targetSelect.addEventListener('change', () => {
+  currentTargetId = targetSelect.value;
+  loadLocalData();
+});
+registerTargetButton.addEventListener('click', registerTargetFolder);
+initTargetButton.addEventListener('click', initializeCurrentTarget);
 roadmapDraftForm.addEventListener('submit', createLocalRoadmapDraft);
 workflowExecutionForm.addEventListener('input', renderWorkflowCommandPreview);
 workflowExecutionForm.addEventListener('submit', executeWorkflowDryRun);
@@ -45,9 +58,13 @@ async function loadLocalData() {
   refreshButton.disabled = true;
 
   try {
+    const targetRegistry = await fetchJson('/api/targets');
+    renderTargetRegistry(targetRegistry);
+
+    const targetQuery = `?targetId=${encodeURIComponent(currentTargetId)}`;
     const [logFiles, roadmapFiles] = await Promise.all([
-      fetchJson('/api/logs'),
-      fetchJson('/api/roadmaps')
+      fetchJson(`/api/logs${targetQuery}`),
+      fetchJson(`/api/roadmaps${targetQuery}`)
     ]);
 
     currentRoadmapFiles = roadmapFiles;
@@ -57,6 +74,119 @@ async function loadLocalData() {
     renderLoadFailure(error);
   } finally {
     refreshButton.disabled = false;
+  }
+}
+
+function renderTargetRegistry(registry) {
+  currentTargets = registry.targets || [];
+  const previousTargetId = currentTargetId;
+  const hasPrevious = currentTargets.some((target) => target.id === previousTargetId);
+  currentTargetId = hasPrevious ? previousTargetId : registry.activeTargetId || currentTargets[0]?.id || '';
+
+  targetSelect.replaceChildren();
+
+  for (const target of currentTargets) {
+    const option = document.createElement('option');
+    option.value = target.id;
+    option.textContent = target.name;
+    targetSelect.append(option);
+  }
+
+  targetSelect.value = currentTargetId;
+  const target = currentTargets.find((item) => item.id === currentTargetId);
+  const readiness = target?.readiness;
+  const missingCount = readiness?.missing?.length || 0;
+  targetStatus.textContent = target
+    ? `${readiness?.status || 'unknown'} / ${target.path}${missingCount > 0 ? ` / ${missingCount} missing` : ''}`
+    : 'No target registered';
+  initTargetButton.disabled = !target || readiness?.status === 'ready';
+}
+
+async function registerTargetFolder() {
+  registerTargetButton.disabled = true;
+  targetStatus.textContent = 'Selecting target folder...';
+
+  try {
+    const picked = await fetchJson('/api/targets/pick-folder', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}'
+    });
+    const fallbackPath = picked.cancelled ? '' : picked.path;
+    const targetPath = window.prompt('Target repository folder path', fallbackPath || '');
+
+    if (!targetPath) {
+      targetStatus.textContent = 'Target registration cancelled.';
+      return;
+    }
+
+    const proposedName = picked.name || targetPath.split(/[\\/]/).filter(Boolean).pop() || 'Target Repo';
+    const name = window.prompt('Target name', proposedName);
+
+    if (!name) {
+      targetStatus.textContent = 'Target registration cancelled.';
+      return;
+    }
+
+    const proposedId = normalizeTargetId(name);
+    const id = window.prompt('Target id', proposedId);
+
+    if (!id) {
+      targetStatus.textContent = 'Target registration cancelled.';
+      return;
+    }
+
+    await fetchJson('/api/targets', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id, name, path: targetPath })
+    });
+    currentTargetId = id;
+    await loadLocalData();
+  } catch (error) {
+    targetStatus.textContent = error.message;
+  } finally {
+    registerTargetButton.disabled = false;
+  }
+}
+
+async function initializeCurrentTarget() {
+  if (!currentTargetId) {
+    return;
+  }
+
+  initTargetButton.disabled = true;
+
+  try {
+    const plan = await fetchJson('/api/targets/init-plan', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ targetId: currentTargetId })
+    });
+
+    if (plan.actions.length === 0) {
+      targetStatus.textContent = 'Target is ready.';
+      await loadLocalData();
+      return;
+    }
+
+    const actionText = plan.actions.map((action) => `${action.type}: ${action.path}`).join('\n');
+
+    if (!window.confirm(`Initialize target with these missing items?\n\n${actionText}`)) {
+      targetStatus.textContent = 'Target initialization cancelled.';
+      return;
+    }
+
+    await fetchJson('/api/targets/init', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ targetId: currentTargetId, confirmed: true })
+    });
+    await loadLocalData();
+  } catch (error) {
+    targetStatus.textContent = error.message;
+  } finally {
+    initTargetButton.disabled = false;
   }
 }
 
@@ -91,9 +221,14 @@ function readWorkflowExecutionRequest() {
     stepRunnerCommand: String(formData.get('stepRunnerCommand') || '')
   };
   const logOut = String(formData.get('logOut') || '').trim();
+  const writeScope = String(formData.get('writeScope') || '').trim();
 
   if (logOut.length > 0) {
     request.logOut = logOut;
+  }
+
+  if (writeScope.length > 0) {
+    request.writeScope = writeScope.split(',').map((item) => item.trim()).filter(Boolean);
   }
 
   return request;
@@ -140,6 +275,8 @@ async function executeWorkflowDryRun(event) {
       },
       body: JSON.stringify({
         ...request,
+        targetId: currentTargetId,
+        writeScope: readWorkflowExecutionRequest().writeScope || ['.'],
         confirmed: true
       })
     });
@@ -492,6 +629,7 @@ async function saveCurrentRoadmapDraft() {
       'content-type': 'application/json'
     },
     body: JSON.stringify({
+      targetId: currentTargetId,
       name: editingRoadmapName,
       content: exported.content
     })
@@ -602,6 +740,7 @@ async function runRoadmapItem(fileName, itemIndex, button) {
         'content-type': 'application/json'
       },
       body: JSON.stringify({
+        targetId: currentTargetId,
         name: fileName,
         itemIndex
       })

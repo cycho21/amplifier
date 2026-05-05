@@ -5,19 +5,47 @@ param(
     [string]$Mode = "dry-run",
     [switch]$AllowReal,
     [string]$StepRunnerCommand = ".\runner\codex.ps1",
-    [string]$StepLogDir = "logs/workflow-steps"
+    [string]$StepLogDir = "logs/workflow-steps",
+    [string]$OperatorRoot = "",
+    [string]$TargetRoot = ""
 )
 
 $ErrorActionPreference = "Stop"
 
-function Read-Utf8File {
-    param([string]$Path)
+if ([string]::IsNullOrWhiteSpace($OperatorRoot)) {
+    $OperatorRoot = (Get-Location).Path
+}
 
-    if (-not (Test-Path $Path)) {
+if ([string]::IsNullOrWhiteSpace($TargetRoot)) {
+    $TargetRoot = (Get-Location).Path
+}
+
+function Resolve-RepoPath {
+    param(
+        [string]$Path,
+        [string]$Root
+    )
+
+    if ([System.IO.Path]::IsPathRooted($Path) -or [string]::IsNullOrWhiteSpace($Root)) {
+        return $Path
+    }
+
+    return Join-Path $Root $Path
+}
+
+function Read-Utf8File {
+    param(
+        [string]$Path,
+        [string]$Root = ""
+    )
+
+    $resolvedPath = Resolve-RepoPath $Path $Root
+
+    if (-not (Test-Path $resolvedPath)) {
         throw "Required input file not found: $Path"
     }
 
-    return Get-Content -Encoding utf8 $Path -Raw
+    return Get-Content -Encoding utf8 $resolvedPath -Raw
 }
 
 function Get-ScalarValue {
@@ -502,7 +530,8 @@ function Test-StepInputs {
     param($Step)
 
     foreach ($path in @($Step.agent_role, $Step.execution_spec, "tasks/$($Step.task_id).md")) {
-        Read-Utf8File $path | Out-Null
+        $root = if ($path -match "^tasks[\\/]") { $TargetRoot } else { $OperatorRoot }
+        Read-Utf8File $path $root | Out-Null
     }
 }
 
@@ -1199,7 +1228,7 @@ function New-WorkflowVotingGate {
     }
 }
 
-$workflowText = Read-Utf8File $WorkflowSpec
+$workflowText = Read-Utf8File $WorkflowSpec $OperatorRoot
 $workflowLines = $workflowText -split "\r?\n"
 $workflowName = Get-ScalarValue $workflowLines "workflow"
 $workflowMode = Get-ScalarValue $workflowLines "mode"
@@ -1250,7 +1279,8 @@ if (
     $output.voting = New-WorkflowVotingGate $output.step_logs
 }
 
-$logDir = Split-Path -Parent $LogOut
+$resolvedLogOut = Resolve-RepoPath $LogOut $TargetRoot
+$logDir = Split-Path -Parent $resolvedLogOut
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
 $log = [ordered]@{
@@ -1267,6 +1297,6 @@ $log = [ordered]@{
     output = $output
 }
 
-$log | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 -Path $LogOut
+$log | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 -Path $resolvedLogOut
 
 Write-Output "Workflow log written to $LogOut"

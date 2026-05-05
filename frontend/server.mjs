@@ -6,10 +6,16 @@ import { fileURLToPath } from 'node:url';
 
 import { createWorkflowExecutionRequest } from './executionRequest.mjs';
 import { parseRoadmapFile } from './roadmapParser.mjs';
+import { createRunIndex, finishRun, startRun } from './runIndex.mjs';
+import { createTargetRegistry, findActiveTarget, normalizeTargetId, registerTarget } from './targetRegistry.mjs';
+import { createTargetInitPlan, initializeTarget } from './targetInit.mjs';
+import { validateTargetStructure } from './targetValidation.mjs';
+import { normalizeWriteScope } from './writeScope.mjs';
 
 const frontendDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultRepoRoot = path.dirname(frontendDir);
 const defaultPort = Number.parseInt(process.env.PORT || '4173', 10);
+const defaultTemplateRoot = path.join(defaultRepoRoot, 'templates', 'target-init');
 
 export async function readLogFiles(repoRoot = defaultRepoRoot) {
   return readDirectoryFiles(path.join(repoRoot, 'logs'), 'logs', '.json');
@@ -107,20 +113,55 @@ export async function executeWorkflowRequest(repoRoot = defaultRepoRoot, input =
     throw new Error('Execution confirmation is required before invoking a local runner command.');
   }
 
+  const targetRoot = options.targetRoot || repoRoot;
+  const operatorRoot = options.operatorRoot || repoRoot;
+  const timestamp = options.timestamp || new Date().toISOString();
   const request = createWorkflowExecutionRequest(input, {
-    timestamp: options.timestamp
+    timestamp
   });
-  await assertExecutionInputFiles(repoRoot, request);
+  request.writeScope = normalizeWriteScope(input.writeScope || ['.']);
+  await assertExecutionInputFiles(operatorRoot, targetRoot, request);
 
   const invoke = options.invoke || invokeWorkflowCommand;
-  const result = await invoke(repoRoot, request);
-  const timestamp = options.timestamp || new Date().toISOString();
+  const recordRunId = `execution-record-${request.taskId}-${timestamp.replace(/[-:.]/g, '')}`;
+  const runIndexPath = options.runIndexPath || path.join(operatorRoot, '.operator', 'runs.json');
+  const runningIndex = startRun(await readRunIndex(runIndexPath), {
+    runId: recordRunId,
+    targetId: input.targetId || 'default',
+    taskId: request.taskId,
+    command: request.command,
+    logPath: request.logOut,
+    writeScope: request.writeScope,
+    startedAt: timestamp
+  });
+  await writeRunIndex(runIndexPath, runningIndex);
+
+  let result;
+
+  try {
+    result = await invoke({ operatorRoot, targetRoot }, request);
+  } catch (error) {
+    result = {
+      stdout: '',
+      stderr: error.message,
+      exitCode: 1
+    };
+  }
+
+  await writeRunIndex(runIndexPath, finishRun(
+    runningIndex,
+    recordRunId,
+    {
+      exitCode: result.exitCode,
+      finishedAt: new Date().toISOString()
+    }
+  ));
   const recordName = toBrowserPath(path.join(
     'logs',
-    `execution-record-${request.taskId}-${timestamp.replace(/[-:.]/g, '')}.json`
+    `${recordRunId}.json`
   ));
   const record = {
-    run_id: `execution-record-${request.taskId}-${timestamp.replace(/[-:.]/g, '')}`,
+    run_id: recordRunId,
     runner: 'operator-ui-execution',
     role: 'operator-control',
     task_id: request.taskId,
@@ -145,13 +186,14 @@ export async function executeWorkflowRequest(repoRoot = defaultRepoRoot, input =
         stdout: result.stdout,
         stderr: result.stderr,
         exit_code: result.exitCode,
-        log_path: request.logOut
+        log_path: request.logOut,
+        write_scope: request.writeScope
       }
     }
   };
 
-  await mkdir(path.join(repoRoot, 'logs'), { recursive: true });
-  await writeFile(path.join(repoRoot, recordName), `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+  await mkdir(path.join(targetRoot, 'logs'), { recursive: true });
+  await writeFile(path.join(targetRoot, recordName), `${JSON.stringify(record, null, 2)}\n`, 'utf8');
 
   return {
     name: recordName,
@@ -159,28 +201,31 @@ export async function executeWorkflowRequest(repoRoot = defaultRepoRoot, input =
   };
 }
 
-async function assertExecutionInputFiles(repoRoot, request) {
+async function assertExecutionInputFiles(operatorRoot, targetRoot, request) {
   const requiredPaths = [
-    request.workflowSpec,
-    `tasks/${request.taskId}.md`,
-    'runner/workflow.ps1',
-    request.stepRunnerCommand.replace(/\\/g, '/').replace(/^\.\//, '')
+    { root: operatorRoot, name: request.workflowSpec },
+    { root: targetRoot, name: `tasks/${request.taskId}.md` },
+    { root: operatorRoot, name: 'runner/workflow.ps1' },
+    {
+      root: operatorRoot,
+      name: request.stepRunnerCommand.replace(/\\/g, '/').replace(/^\.\//, '')
+    }
   ];
 
-  for (const fileName of requiredPaths) {
+  for (const item of requiredPaths) {
     try {
-      const fileStat = await stat(path.join(repoRoot, fileName));
+      const fileStat = await stat(path.join(item.root, item.name));
 
       if (!fileStat.isFile()) {
         throw new Error();
       }
     } catch (error) {
-      throw new Error(`Required execution input file not found: ${fileName}`);
+      throw new Error(`Required execution input file not found: ${item.name}`);
     }
   }
 }
 
-function invokeWorkflowCommand(repoRoot, request) {
+function invokeWorkflowCommand(roots, request) {
   return new Promise((resolve) => {
     const child = spawn(
       'powershell.exe',
@@ -189,7 +234,7 @@ function invokeWorkflowCommand(repoRoot, request) {
         '-ExecutionPolicy',
         'Bypass',
         '-File',
-        path.join(repoRoot, 'runner', 'workflow.ps1'),
+        path.join(roots.operatorRoot, 'runner', 'workflow.ps1'),
         '-WorkflowSpec',
         request.workflowSpec,
         '-TaskId',
@@ -199,9 +244,13 @@ function invokeWorkflowCommand(repoRoot, request) {
         '-StepRunnerCommand',
         request.stepRunnerCommand,
         '-LogOut',
-        request.logOut
+        request.logOut,
+        '-OperatorRoot',
+        roots.operatorRoot,
+        '-TargetRoot',
+        roots.targetRoot
       ],
-      { cwd: repoRoot }
+      { cwd: roots.targetRoot }
     );
     let stdout = '';
     let stderr = '';
@@ -220,6 +269,40 @@ function invokeWorkflowCommand(repoRoot, request) {
       resolve({ stdout, stderr, exitCode: code ?? 1 });
     });
   });
+}
+
+export async function readTargetRegistry(operatorRoot = defaultRepoRoot) {
+  const statePath = path.join(operatorRoot, '.operator', 'targets.json');
+  const examplePath = path.join(operatorRoot, '.operator', 'targets.example.json');
+
+  for (const filePath of [statePath, examplePath]) {
+    try {
+      return createTargetRegistry(JSON.parse(await readFile(filePath, 'utf8')));
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+  }
+
+  return createTargetRegistry({
+    activeTargetId: 'amplifier',
+    targets: [
+      {
+        id: 'amplifier',
+        name: 'Mini Amplifier',
+        path: operatorRoot
+      }
+    ]
+  });
+}
+
+export async function writeTargetRegistry(operatorRoot = defaultRepoRoot, registry) {
+  const normalized = createTargetRegistry(registry);
+  const statePath = path.join(operatorRoot, '.operator', 'targets.json');
+  await mkdir(path.dirname(statePath), { recursive: true });
+  await writeFile(statePath, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8');
+  return normalized;
 }
 
 function formatRoadmapTaskDraft(taskId, goal, roadmapFile, itemNumber) {
@@ -303,20 +386,83 @@ function formatRoadmapTaskDraft(taskId, goal, roadmapFile, itemNumber) {
 }
 
 export function createOperatorServer(options = {}) {
-  const repoRoot = options.repoRoot || defaultRepoRoot;
+  const operatorRoot = options.operatorRoot || options.repoRoot || defaultRepoRoot;
   const staticRoot = options.staticRoot || frontendDir;
+  const templateRoot = options.templateRoot || defaultTemplateRoot;
 
   return createServer(async (request, response) => {
     try {
       const url = new URL(request.url || '/', 'http://127.0.0.1');
 
+      if (url.pathname === '/api/targets') {
+        if (request.method === 'GET') {
+          await sendJson(response, await readTargetsWithReadiness(operatorRoot));
+          return;
+        }
+
+        if (request.method === 'POST') {
+          const body = await readJsonRequest(request);
+          const registry = await readTargetRegistry(operatorRoot);
+          const updated = registerTarget(registry, {
+            id: body.id || normalizeTargetId(body.name),
+            name: body.name,
+            path: body.path
+          });
+          await sendJson(response, await writeTargetRegistry(operatorRoot, updated));
+          return;
+        }
+
+        response.writeHead(405);
+        response.end('Method not allowed');
+        return;
+      }
+
+      if (url.pathname === '/api/targets/pick-folder') {
+        if (request.method !== 'POST') {
+          response.writeHead(405);
+          response.end('Method not allowed');
+          return;
+        }
+
+        await sendJson(response, await pickTargetFolder(options));
+        return;
+      }
+
+      if (url.pathname === '/api/targets/init-plan') {
+        if (request.method !== 'POST') {
+          response.writeHead(405);
+          response.end('Method not allowed');
+          return;
+        }
+
+        const body = await readJsonRequest(request);
+        const target = await resolveTarget(operatorRoot, body.targetId);
+        await sendJson(response, await createTargetInitPlan(target.path, templateRoot));
+        return;
+      }
+
+      if (url.pathname === '/api/targets/init') {
+        if (request.method !== 'POST') {
+          response.writeHead(405);
+          response.end('Method not allowed');
+          return;
+        }
+
+        const body = await readJsonRequest(request);
+        const target = await resolveTarget(operatorRoot, body.targetId);
+        await sendJson(response, await initializeTarget(target.path, templateRoot, body));
+        return;
+      }
+
       if (url.pathname === '/api/logs') {
-        await sendJson(response, await readLogFiles(repoRoot));
+        const target = await resolveTarget(operatorRoot, url.searchParams.get('targetId'));
+        await sendJson(response, await readLogFiles(target.path));
         return;
       }
 
       if (url.pathname === '/api/roadmaps') {
-        await sendJson(response, await readRoadmapFiles(repoRoot));
+        const target = await resolveTarget(operatorRoot, url.searchParams.get('targetId'));
+        await sendJson(response, await readRoadmapFiles(target.path));
         return;
       }
 
@@ -328,7 +474,8 @@ export function createOperatorServer(options = {}) {
         }
 
         const body = await readJsonRequest(request);
-        await sendJson(response, await saveRoadmapFile(repoRoot, body.name, body.content));
+        const target = await resolveTarget(operatorRoot, body.targetId);
+        await sendJson(response, await saveRoadmapFile(target.path, body.name, body.content));
         return;
       }
 
@@ -340,7 +487,8 @@ export function createOperatorServer(options = {}) {
         }
 
         const body = await readJsonRequest(request);
-        await sendJson(response, await runRoadmapItem(repoRoot, body));
+        const target = await resolveTarget(operatorRoot, body.targetId);
+        await sendJson(response, await runRoadmapItem(target.path, body));
         return;
       }
 
@@ -352,7 +500,8 @@ export function createOperatorServer(options = {}) {
         }
 
         const body = await readJsonRequest(request);
-        await sendJson(response, await executeWorkflowRequest(repoRoot, body));
+        const target = await resolveTarget(operatorRoot, body.targetId);
+        await sendJson(response, await executeWorkflowRequest(target.path, body, { operatorRoot }));
         return;
       }
 
@@ -362,6 +511,93 @@ export function createOperatorServer(options = {}) {
       response.end(JSON.stringify({ error: error.message }));
     }
   });
+}
+
+async function readTargetsWithReadiness(operatorRoot) {
+  const registry = await readTargetRegistry(operatorRoot);
+  const targets = await Promise.all(
+    registry.targets.map(async (target) => ({
+      ...target,
+      readiness: await validateTargetStructure(target.path)
+    }))
+  );
+
+  return {
+    activeTargetId: registry.activeTargetId,
+    targets
+  };
+}
+
+async function resolveTarget(operatorRoot, targetId) {
+  const registry = await readTargetRegistry(operatorRoot);
+  const normalizedId = targetId ? normalizeTargetId(targetId) : registry.activeTargetId;
+  const target = registry.targets.find((item) => item.id === normalizedId) || findActiveTarget(registry);
+
+  if (!target) {
+    throw new Error('No registered target repository is available.');
+  }
+
+  return target;
+}
+
+async function pickTargetFolder(options) {
+  if (options.pickFolder) {
+    return options.pickFolder();
+  }
+
+  return pickWindowsFolder();
+}
+
+function pickWindowsFolder() {
+  return new Promise((resolve) => {
+    const child = spawn('powershell.exe', [
+      '-NoProfile',
+      '-STA',
+      '-Command',
+      [
+        'Add-Type -AssemblyName System.Windows.Forms',
+        '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
+        '$dialog.Description = "Select target repository folder"',
+        'if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {',
+        '  [pscustomobject]@{ cancelled = $false; path = $dialog.SelectedPath; name = [System.IO.Path]::GetFileName($dialog.SelectedPath) } | ConvertTo-Json -Compress',
+        '} else {',
+        '  [pscustomobject]@{ cancelled = $true; path = ""; name = "" } | ConvertTo-Json -Compress',
+        '}'
+      ].join('; ')
+    ]);
+    let stdout = '';
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.on('error', () => {
+      resolve({ cancelled: true, path: '', name: '' });
+    });
+    child.on('close', () => {
+      try {
+        resolve(JSON.parse(stdout || '{}'));
+      } catch (error) {
+        resolve({ cancelled: true, path: '', name: '' });
+      }
+    });
+  });
+}
+
+async function readRunIndex(runIndexPath) {
+  try {
+    return createRunIndex(JSON.parse(await readFile(runIndexPath, 'utf8')));
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return createRunIndex();
+    }
+
+    throw error;
+  }
+}
+
+async function writeRunIndex(runIndexPath, index) {
+  await mkdir(path.dirname(runIndexPath), { recursive: true });
+  await writeFile(runIndexPath, `${JSON.stringify(createRunIndex(index), null, 2)}\n`, 'utf8');
 }
 
 function normalizeRoadmapFileName(fileName) {

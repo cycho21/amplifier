@@ -9,7 +9,7 @@ Mini Amplifier.
 
 ## Status
 
-Not started.
+Completed.
 
 ## Principles
 
@@ -28,32 +28,32 @@ Not started.
    `.operator/targets.example.json` and ignored local state files.
 2. [x] Add target registry model and tests for target id, name, path, active
    target, and duplicate detection.
-3. [ ] Add target validation that reports `ready` or `init required` from
+3. [x] Add target validation that reports `ready` or `init required` from
    required target folders and files.
-4. [ ] Add `templates/target-init/` with minimal target files:
+4. [x] Add `templates/target-init/` with minimal target files:
    `docs/plan/roadmaps/NEXT.md`, `tasks/000_template.md`, and `logs/.gitkeep`.
-5. [ ] Add target init planning that returns missing folders/files without
+5. [x] Add target init planning that returns missing folders/files without
    mutating the target repository.
-6. [ ] Add confirmed target initialization that creates only missing folders and
+6. [x] Add confirmed target initialization that creates only missing folders and
    files and never overwrites existing files.
-7. [ ] Add local folder picker registration flow with editable proposed target
+7. [x] Add local folder picker registration flow with editable proposed target
    name and generated target id.
-8. [ ] Add a target selector and target readiness status to the Operator UI.
-9. [ ] Split Operator UI server configuration into app root and active target
+8. [x] Add a target selector and target readiness status to the Operator UI.
+9. [x] Split Operator UI server configuration into app root and active target
    repo root.
-10. [ ] Convert roadmaps, generated task drafts, logs, and execution records to
+10. [x] Convert roadmaps, generated task drafts, logs, and execution records to
    resolve against the selected target repository.
-11. [ ] Add central `.operator/runs.json` run index for target id, task id,
+11. [x] Add central `.operator/runs.json` run index for target id, task id,
    command, status, timestamps, log path, exit code, and write scope.
-12. [ ] Add write scope model and validation using repo-relative path prefixes.
-13. [ ] Enforce the initial background execution rule: one running task per
+12. [x] Add write scope model and validation using repo-relative path prefixes.
+13. [x] Enforce the initial background execution rule: one running task per
    target repository.
-14. [ ] Keep shared agents, execution specs, workflow specs, and runner adapters
+14. [x] Keep shared agents, execution specs, workflow specs, and runner adapters
    resolved from Mini Amplifier while target plans/tasks/logs resolve from the
    selected target repository.
-15. [ ] Add tests proving generated tasks and logs are written into the target
+15. [x] Add tests proving generated tasks and logs are written into the target
    repo, not the Operator UI app directory.
-16. [ ] Dogfood by registering the current `amplifier` repository as the first
+16. [x] Dogfood by registering the current `amplifier` repository as the first
    target and running a dry-run roadmap item through the target-aware flow.
 
 ## Acceptance Criteria

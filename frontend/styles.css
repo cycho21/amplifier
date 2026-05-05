@@ -76,6 +76,46 @@ textarea {
   flex-wrap: wrap;
 }
 
+.target-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f7f8fa;
+}
+
+.target-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.target-controls select {
+  min-inline-size: 180px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 400;
+  text-transform: none;
+}
+
+.target-status {
+  max-inline-size: 360px;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .open-button {
   display: inline-flex;
   align-items: center;
@@ -827,6 +867,15 @@ textarea {
   }
 
   .toolbar-actions {
+    inline-size: 100%;
+  }
+
+  .target-controls {
+    inline-size: 100%;
+  }
+
+  .target-controls label,
+  .target-controls select {
     inline-size: 100%;
   }
 

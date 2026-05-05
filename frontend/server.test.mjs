@@ -144,6 +144,37 @@ test('runRoadmapItem writes a dry-run log for a selected roadmap item', async ()
   }
 });
 
+test('runRoadmapItem writes generated tasks and logs into the selected target repo', async () => {
+  const operatorRoot = await mkdtemp(path.join(tmpdir(), 'operator-app-'));
+  const targetRoot = await mkdtemp(path.join(tmpdir(), 'operator-target-'));
+
+  try {
+    await mkdir(path.join(operatorRoot, 'logs'), { recursive: true });
+    await mkdir(path.join(targetRoot, 'docs', 'plan', 'roadmaps'), { recursive: true });
+    await writeFile(path.join(targetRoot, 'docs', 'plan', 'roadmaps', 'NEXT.md'), [
+      '# Next',
+      '',
+      '## Sequence',
+      '1. [ ] Generate target task.'
+    ].join('\n'));
+
+    const result = await runRoadmapItem(targetRoot, {
+      name: 'docs/plan/roadmaps/NEXT.md',
+      itemIndex: 0
+    });
+
+    await readFile(path.join(targetRoot, result.name), 'utf8');
+    await readFile(path.join(targetRoot, 'tasks', 'roadmap-NEXT-1.md'), 'utf8');
+    await assert.rejects(
+      readFile(path.join(operatorRoot, result.name), 'utf8'),
+      /ENOENT/
+    );
+  } finally {
+    await rm(operatorRoot, { recursive: true, force: true });
+    await rm(targetRoot, { recursive: true, force: true });
+  }
+});
+
 test('executeWorkflowRequest captures dry-run command output into a UI result record', async () => {
   const repoRoot = await mkdtemp(path.join(tmpdir(), 'operator-server-'));
 
@@ -187,6 +218,60 @@ test('executeWorkflowRequest captures dry-run command output into a UI result re
     assert.equal(written.output.execution.log_path, 'logs/operator-workflow-roadmap-NEXT-6-20260505T010203004Z.json');
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test('executeWorkflowRequest resolves shared runner assets from operator root and writes records to target root', async () => {
+  const operatorRoot = await mkdtemp(path.join(tmpdir(), 'operator-app-'));
+  const targetRoot = await mkdtemp(path.join(tmpdir(), 'operator-target-'));
+
+  try {
+    await mkdir(path.join(operatorRoot, 'workflows'), { recursive: true });
+    await mkdir(path.join(operatorRoot, 'runner'), { recursive: true });
+    await mkdir(path.join(targetRoot, 'tasks'), { recursive: true });
+    await writeFile(path.join(targetRoot, 'tasks', 'roadmap-NEXT-10.md'), '# Task\n');
+    await writeFile(path.join(operatorRoot, 'workflows', 'implementation-review.yaml'), 'workflow: implementation-review\n');
+    await writeFile(path.join(operatorRoot, 'runner', 'workflow.ps1'), '# workflow\n');
+    await writeFile(path.join(operatorRoot, 'runner', 'codex.ps1'), '# codex\n');
+
+    const result = await executeWorkflowRequest(
+      targetRoot,
+      {
+        confirmed: true,
+        targetId: 'client-app',
+        taskId: 'roadmap-NEXT-10',
+        workflowSpec: 'workflows/implementation-review.yaml',
+        mode: 'dry-run',
+        stepRunnerCommand: 'runner/codex.ps1',
+        writeScope: ['src/app']
+      },
+      {
+        operatorRoot,
+        timestamp: '2026-05-05T03:04:05.006Z',
+        invoke: async (roots, request) => ({
+          stdout: `${roots.operatorRoot}\n${roots.targetRoot}\n${request.writeScope.paths.join(',')}\n`,
+          stderr: '',
+          exitCode: 0
+        })
+      }
+    );
+    const written = JSON.parse(await readFile(path.join(targetRoot, result.name), 'utf8'));
+    const runIndex = JSON.parse(await readFile(path.join(operatorRoot, '.operator', 'runs.json'), 'utf8'));
+
+    assert.equal(result.name, 'logs/execution-record-roadmap-NEXT-10-20260505T030405006Z.json');
+    assert.deepEqual(written.output.execution.write_scope.paths, ['src/app']);
+    assert.equal(runIndex.runs[0].targetId, 'client-app');
+    assert.equal(runIndex.runs[0].status, 'completed');
+    assert.deepEqual(runIndex.runs[0].writeScope.paths, ['src/app']);
+    assert.match(written.output.execution.stdout, new RegExp(escapeRegExp(operatorRoot)));
+    assert.match(written.output.execution.stdout, new RegExp(escapeRegExp(targetRoot)));
+    await assert.rejects(
+      readFile(path.join(operatorRoot, result.name), 'utf8'),
+      /ENOENT/
+    );
+  } finally {
+    await rm(operatorRoot, { recursive: true, force: true });
+    await rm(targetRoot, { recursive: true, force: true });
   }
 });
 
@@ -259,3 +344,7 @@ test('executeWorkflowRequest records failed dry-run command output', async () =>
     await rm(repoRoot, { recursive: true, force: true });
   }
 });
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}

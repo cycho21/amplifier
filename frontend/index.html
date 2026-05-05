@@ -14,6 +14,21 @@
           <h1>Operator</h1>
         </div>
         <div class="toolbar-actions">
+          <div class="target-controls" aria-label="Target repository controls">
+            <label>
+              <span>Target</span>
+              <select id="target-select"></select>
+            </label>
+            <span id="target-status" class="target-status">Loading target...</span>
+            <button id="register-target" class="open-button secondary" type="button" title="Register a local target repository folder.">
+              <span aria-hidden="true">＋</span>
+              <span>Register target</span>
+            </button>
+            <button id="init-target" class="open-button secondary" type="button" title="Create missing target planning, task, and log files.">
+              <span aria-hidden="true">✓</span>
+              <span>Init target</span>
+            </button>
+          </div>
           <button id="refresh-data" class="open-button" type="button" title="Reload local logs and roadmaps from this repository.">
             <span aria-hidden="true">↻</span>
             <span>Refresh local data</span>
@@ -146,6 +161,10 @@ Validate before save.</textarea>
           <label>
             <span>Log Output</span>
             <input name="logOut" type="text" placeholder="Generated automatically">
+          </label>
+          <label>
+            <span>Write Scope</span>
+            <input name="writeScope" type="text" value="." placeholder="Repo-relative prefixes, comma separated">
           </label>
           <div class="execution-command">
             <span class="metric-label">Command</span>
