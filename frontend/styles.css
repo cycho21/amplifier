@@ -706,6 +706,13 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.roadmap-item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+}
+
 .roadmap-items li.done {
   color: var(--muted);
   text-decoration: line-through;

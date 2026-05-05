@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { readLogFiles, readRoadmapFiles, saveRoadmapFile } from './server.mjs';
+import { readLogFiles, readRoadmapFiles, runRoadmapItem, saveRoadmapFile } from './server.mjs';
 
 test('readLogFiles reads top-level JSON logs from the repo logs folder', async () => {
   const repoRoot = await mkdtemp(path.join(tmpdir(), 'operator-server-'));
@@ -83,6 +83,46 @@ test('saveRoadmapFile rejects paths outside docs/plan/roadmaps', async () => {
       saveRoadmapFile(repoRoot, 'docs/plan/roadmaps/../DECISIONS.md', '# Bad\n'),
       /Roadmap file must be a top-level markdown file/
     );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test('runRoadmapItem writes a dry-run log for a selected roadmap item', async () => {
+  const repoRoot = await mkdtemp(path.join(tmpdir(), 'operator-server-'));
+
+  try {
+    await mkdir(path.join(repoRoot, 'docs', 'plan', 'roadmaps'), { recursive: true });
+    await mkdir(path.join(repoRoot, 'logs'), { recursive: true });
+    await writeFile(path.join(repoRoot, 'docs', 'plan', 'roadmaps', 'NEXT.md'), [
+      '# Next',
+      '',
+      '## Status',
+      'Not Started',
+      '',
+      '## Sequence',
+      '1. [x] Finish previous work.',
+      '2. [ ] Add roadmap run controls.'
+    ].join('\n'));
+
+    const result = await runRoadmapItem(repoRoot, {
+      name: 'docs/plan/roadmaps/NEXT.md',
+      itemIndex: 1
+    });
+    const written = JSON.parse(await readFile(path.join(repoRoot, result.name), 'utf8'));
+
+    assert.equal(result.name.startsWith('logs/roadmap-run-'), true);
+    assert.equal(written.runner, 'operator-ui-dry-run');
+    assert.equal(written.task_id, 'roadmap-NEXT-2');
+    assert.deepEqual(written.input_files, ['docs/plan/roadmaps/NEXT.md']);
+    assert.equal(written.output.summary, 'Dry-run roadmap execution draft created for item 2.');
+    assert.deepEqual(written.output.changed_files, []);
+    assert.equal(written.output.verification_result, 'not-run');
+    assert.deepEqual(written.output.roadmap_item, {
+      file: 'docs/plan/roadmaps/NEXT.md',
+      number: 2,
+      text: 'Add roadmap run controls.'
+    });
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
   }

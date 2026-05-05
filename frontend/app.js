@@ -475,15 +475,52 @@ function renderRoadmapCard(roadmap) {
 
   const list = document.createElement('ol');
   list.className = 'roadmap-items';
-  for (const item of roadmap.items) {
+  roadmap.items.forEach((item, index) => {
     const row = document.createElement('li');
     row.className = item.done ? 'done' : '';
-    row.textContent = item.text;
+    const content = document.createElement('div');
+    content.className = 'roadmap-item-row';
+    const text = document.createElement('span');
+    text.textContent = item.text;
+    content.append(text);
+
+    if (!item.done) {
+      const runButton = document.createElement('button');
+      runButton.className = 'open-button secondary compact';
+      runButton.type = 'button';
+      runButton.textContent = 'Run';
+      runButton.addEventListener('click', () => runRoadmapItem(roadmap.fileName, index, runButton));
+      content.append(runButton);
+    }
+
+    row.append(content);
     list.append(row);
-  }
+  });
 
   card.append(header, progress, progressText, list);
   return card;
+}
+
+async function runRoadmapItem(fileName, itemIndex, button) {
+  button.disabled = true;
+
+  try {
+    await fetchJson('/api/roadmaps/run', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: fileName,
+        itemIndex
+      })
+    });
+    await loadLocalData();
+  } catch (error) {
+    renderLoadFailure(error);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function selectRun(index) {

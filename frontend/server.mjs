@@ -1,7 +1,9 @@
 import { createServer } from 'node:http';
-import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { parseRoadmapFile } from './roadmapParser.mjs';
 
 const frontendDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultRepoRoot = path.dirname(frontendDir);
@@ -27,6 +29,60 @@ export async function saveRoadmapFile(repoRoot = defaultRepoRoot, fileName, cont
   return {
     name: toBrowserPath(relativeName),
     content
+  };
+}
+
+export async function runRoadmapItem(repoRoot = defaultRepoRoot, request = {}) {
+  const relativeName = normalizeRoadmapFileName(request.name);
+  const roadmapContent = await readFile(path.join(repoRoot, relativeName), 'utf8');
+  const parsed = parseRoadmapFile(toBrowserPath(relativeName), roadmapContent);
+
+  if (!parsed.ok) {
+    throw new Error(parsed.error);
+  }
+
+  const itemIndex = Number(request.itemIndex);
+  const item = parsed.roadmap.items[itemIndex];
+
+  if (!Number.isInteger(itemIndex) || itemIndex < 0 || !item) {
+    throw new Error('Roadmap item index is out of range.');
+  }
+
+  if (item.done) {
+    throw new Error('Completed roadmap items cannot be run.');
+  }
+
+  const itemNumber = itemIndex + 1;
+  const roadmapStem = path.basename(relativeName, path.extname(relativeName));
+  const timestamp = new Date().toISOString().replace(/[-:.]/g, '');
+  const runId = `roadmap-${roadmapStem}-${itemNumber}`;
+  const logName = toBrowserPath(path.join('logs', `roadmap-run-${roadmapStem}-${itemNumber}-${timestamp}.json`));
+  const log = {
+    run_id: runId,
+    runner: 'operator-ui-dry-run',
+    role: 'roadmap-operator',
+    task_id: runId,
+    input_files: [toBrowserPath(relativeName)],
+    output: {
+      summary: `Dry-run roadmap execution draft created for item ${itemNumber}.`,
+      changed_files: [],
+      verification_result: 'not-run',
+      risks: ['This run did not invoke an external runner.'],
+      next_steps: ['Review the generated roadmap task draft before real execution.'],
+      roadmap_item: {
+        file: toBrowserPath(relativeName),
+        number: itemNumber,
+        text: item.text
+      }
+    }
+  };
+
+  await mkdir(path.join(repoRoot, 'logs'), { recursive: true });
+  await writeFile(path.join(repoRoot, logName), `${JSON.stringify(log, null, 2)}\n`, 'utf8');
+
+  return {
+    name: logName,
+    content: `${JSON.stringify(log, null, 2)}\n`
   };
 }
 
@@ -57,6 +113,18 @@ export function createOperatorServer(options = {}) {
 
         const body = await readJsonRequest(request);
         await sendJson(response, await saveRoadmapFile(repoRoot, body.name, body.content));
+        return;
+      }
+
+      if (url.pathname === '/api/roadmaps/run') {
+        if (request.method !== 'POST') {
+          response.writeHead(405);
+          response.end('Method not allowed');
+          return;
+        }
+
+        const body = await readJsonRequest(request);
+        await sendJson(response, await runRoadmapItem(repoRoot, body));
         return;
       }
 
