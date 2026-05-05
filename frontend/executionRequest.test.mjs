@@ -47,6 +47,30 @@ test('createWorkflowExecutionRequest rejects real mode from the Operator UI', ()
   );
 });
 
+test('createWorkflowExecutionRequest allows real mode only with explicit opt-in', () => {
+  const request = createWorkflowExecutionRequest(
+    {
+      taskId: 'roadmap-NEXT-6',
+      workflowSpec: 'workflows/implementation-review.yaml',
+      mode: 'real',
+      stepRunnerCommand: 'runner/codex.ps1',
+      allowRealExecution: true,
+      realExecutionConfirmation: 'RUN REAL'
+    },
+    { timestamp: '2026-05-05T01:02:03.004Z' }
+  );
+
+  assert.deepEqual(request, {
+    taskId: 'roadmap-NEXT-6',
+    workflowSpec: 'workflows/implementation-review.yaml',
+    mode: 'real',
+    stepRunnerCommand: '.\\runner\\codex.ps1',
+    logOut: 'logs/operator-workflow-roadmap-NEXT-6-20260505T010203004Z.json',
+    allowReal: true,
+    command: '.\\runner\\workflow.ps1 -WorkflowSpec "workflows/implementation-review.yaml" -TaskId "roadmap-NEXT-6" -Mode "real" -StepRunnerCommand ".\\runner\\codex.ps1" -LogOut "logs/operator-workflow-roadmap-NEXT-6-20260505T010203004Z.json" -AllowReal'
+  });
+});
+
 test('createWorkflowExecutionRequest rejects invalid paths and task ids', () => {
   assert.throws(
     () => createWorkflowExecutionRequest({ taskId: '../bad' }),

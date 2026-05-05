@@ -5,11 +5,12 @@ const DEFAULT_STEP_RUNNER_COMMAND = '.\\runner\\codex.ps1';
 export function createWorkflowExecutionRequest(input = {}, options = {}) {
   const taskId = normalizeTaskId(input.taskId);
   const workflowSpec = normalizeWorkflowSpec(input.workflowSpec || DEFAULT_WORKFLOW_SPEC);
-  const mode = normalizeMode(input.mode || DEFAULT_MODE);
+  const mode = normalizeMode(input.mode || DEFAULT_MODE, input);
   const stepRunnerCommand = normalizeStepRunnerCommand(
     input.stepRunnerCommand || DEFAULT_STEP_RUNNER_COMMAND
   );
   const logOut = normalizeLogOut(input.logOut || defaultLogOut(taskId, options.timestamp));
+  const allowReal = mode === 'real';
 
   return {
     taskId,
@@ -17,25 +18,33 @@ export function createWorkflowExecutionRequest(input = {}, options = {}) {
     mode,
     stepRunnerCommand,
     logOut,
+    ...(allowReal ? { allowReal } : {}),
     command: formatWorkflowCommand({
       workflowSpec,
       taskId,
       mode,
       stepRunnerCommand,
-      logOut
+      logOut,
+      allowReal
     })
   };
 }
 
 export function formatWorkflowCommand(request) {
-  return [
+  const parts = [
     '.\\runner\\workflow.ps1',
     `-WorkflowSpec "${request.workflowSpec}"`,
     `-TaskId "${request.taskId}"`,
     `-Mode "${request.mode}"`,
     `-StepRunnerCommand "${request.stepRunnerCommand}"`,
     `-LogOut "${request.logOut}"`
-  ].join(' ');
+  ];
+
+  if (request.allowReal === true) {
+    parts.push('-AllowReal');
+  }
+
+  return parts.join(' ');
 }
 
 function defaultLogOut(taskId, timestamp = new Date().toISOString()) {
@@ -66,12 +75,24 @@ function normalizeWorkflowSpec(value) {
   return normalized;
 }
 
-function normalizeMode(value) {
-  if (value !== DEFAULT_MODE) {
+function normalizeMode(value, input) {
+  if (value === DEFAULT_MODE) {
+    return value;
+  }
+
+  if (
+    value === 'real' &&
+    input.allowRealExecution === true &&
+    input.realExecutionConfirmation === 'RUN REAL'
+  ) {
+    return value;
+  }
+
+  if (value === 'real') {
     throw new Error('Only dry-run workflow execution is available from the Operator UI.');
   }
 
-  return value;
+  throw new Error('Only dry-run workflow execution is available from the Operator UI.');
 }
 
 function normalizeStepRunnerCommand(value) {
