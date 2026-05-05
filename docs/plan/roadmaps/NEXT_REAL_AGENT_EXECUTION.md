@@ -29,7 +29,7 @@ In progress.
    confirmation.
 3. [x] Add UI controls for real execution that are disabled until a generated
    task, write scope, and explicit real confirmation are present.
-4. [ ] Show a real execution risk summary before invoking the runner.
+4. [x] Show a real execution risk summary before invoking the runner.
 5. [ ] Record real execution metadata in `.operator/runs.json` and execution
    record logs without changing dry-run log shape.
 6. [ ] Add UI states for real running, real failed, and real completed records.

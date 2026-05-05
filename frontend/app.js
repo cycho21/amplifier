@@ -1,6 +1,9 @@
 import { summarizeRuns } from './logParser.mjs';
 import { createWorkflowExecutionRequest } from './executionRequest.mjs';
-import { createWorkflowControlState } from './executionControlState.mjs';
+import {
+  createWorkflowControlState,
+  formatWorkflowConfirmationMessage
+} from './executionControlState.mjs';
 import { normalizeTargetId } from './targetRegistry.mjs';
 import {
   createRoadmapDraftExport,
@@ -111,6 +114,16 @@ function renderTargetRegistry(registry) {
     ? `${readiness?.status || 'unknown'} / ${target.path}${missingCount > 0 ? ` / ${missingCount} missing` : ''}`
     : 'No target registered';
   initTargetButton.disabled = !target || readiness?.status === 'ready';
+}
+
+function getCurrentTargetContext() {
+  const target = currentTargets.find((item) => item.id === currentTargetId);
+
+  return {
+    targetId: currentTargetId,
+    targetName: target?.name || '',
+    targetPath: target?.path || ''
+  };
 }
 
 async function registerTargetFolder() {
@@ -305,7 +318,10 @@ async function executeWorkflow(event) {
     return;
   }
 
-  if (!window.confirm(`Run this ${request.mode} workflow command?\n\n${request.command}`)) {
+  if (!window.confirm(formatWorkflowConfirmationMessage(request, {
+    ...getCurrentTargetContext(),
+    writeScope: formRequest.writeScope || ['.']
+  }))) {
     workflowExecutionStatus.textContent = 'Execution cancelled.';
     return;
   }
