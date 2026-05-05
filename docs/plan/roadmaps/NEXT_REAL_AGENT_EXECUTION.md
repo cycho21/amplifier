@@ -27,7 +27,7 @@ In progress.
    with explicit opt-in and emits `-AllowReal`.
 2. [x] Add server-side real execution confirmation checks separate from dry-run
    confirmation.
-3. [ ] Add UI controls for real execution that are disabled until a generated
+3. [x] Add UI controls for real execution that are disabled until a generated
    task, write scope, and explicit real confirmation are present.
 4. [ ] Show a real execution risk summary before invoking the runner.
 5. [ ] Record real execution metadata in `.operator/runs.json` and execution

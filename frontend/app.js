@@ -1,5 +1,6 @@
 import { summarizeRuns } from './logParser.mjs';
 import { createWorkflowExecutionRequest } from './executionRequest.mjs';
+import { createWorkflowControlState } from './executionControlState.mjs';
 import { normalizeTargetId } from './targetRegistry.mjs';
 import {
   createRoadmapDraftExport,
@@ -58,8 +59,8 @@ targetSelect.addEventListener('change', () => {
 registerTargetButton.addEventListener('click', registerTargetFolder);
 initTargetButton.addEventListener('click', initializeCurrentTarget);
 roadmapDraftForm.addEventListener('submit', createLocalRoadmapDraft);
-workflowExecutionForm.addEventListener('input', renderWorkflowCommandPreview);
-workflowExecutionForm.addEventListener('submit', executeWorkflowDryRun);
+workflowExecutionForm.addEventListener('input', handleWorkflowExecutionInput);
+workflowExecutionForm.addEventListener('submit', executeWorkflow);
 roadmapReviewClose.addEventListener('click', () => roadmapReviewModal.close());
 renderWorkflowCommandPreview();
 loadLocalData();
@@ -228,7 +229,9 @@ function readWorkflowExecutionRequest() {
     taskId: String(formData.get('taskId') || ''),
     workflowSpec: String(formData.get('workflowSpec') || ''),
     mode: String(formData.get('mode') || ''),
-    stepRunnerCommand: String(formData.get('stepRunnerCommand') || '')
+    stepRunnerCommand: String(formData.get('stepRunnerCommand') || ''),
+    generatedTaskReady: formData.get('generatedTaskReady') === 'true',
+    realExecutionConfirmation: String(formData.get('realExecutionConfirmation') || '')
   };
   const logOut = String(formData.get('logOut') || '').trim();
   const writeScope = String(formData.get('writeScope') || '').trim();
@@ -244,11 +247,34 @@ function readWorkflowExecutionRequest() {
   return request;
 }
 
+function handleWorkflowExecutionInput(event) {
+  if (event.target?.name === 'taskId') {
+    workflowExecutionForm.elements.generatedTaskReady.value = 'false';
+  }
+
+  renderWorkflowCommandPreview();
+}
+
 function renderWorkflowCommandPreview() {
+  const formRequest = readWorkflowExecutionRequest();
+  const controlState = createWorkflowControlState(formRequest);
+
+  workflowExecuteButton.textContent = controlState.buttonLabel;
+
+  if (!controlState.canExecute) {
+    workflowCommandPreview.textContent = '';
+    workflowExecutionStatus.textContent = controlState.status;
+    workflowExecuteButton.disabled = true;
+    return;
+  }
+
   try {
-    const request = createWorkflowExecutionRequest(readWorkflowExecutionRequest());
+    const request = createWorkflowExecutionRequest({
+      ...formRequest,
+      ...controlState.requestPayload
+    });
     workflowCommandPreview.textContent = request.command;
-    workflowExecutionStatus.textContent = 'Ready.';
+    workflowExecutionStatus.textContent = controlState.status;
     workflowExecuteButton.disabled = false;
   } catch (error) {
     workflowCommandPreview.textContent = '';
@@ -257,25 +283,35 @@ function renderWorkflowCommandPreview() {
   }
 }
 
-async function executeWorkflowDryRun(event) {
+async function executeWorkflow(event) {
   event.preventDefault();
 
   let request;
+  const formRequest = readWorkflowExecutionRequest();
+  const controlState = createWorkflowControlState(formRequest);
+
+  if (!controlState.canExecute) {
+    workflowExecutionStatus.textContent = controlState.status;
+    return;
+  }
 
   try {
-    request = createWorkflowExecutionRequest(readWorkflowExecutionRequest());
+    request = createWorkflowExecutionRequest({
+      ...formRequest,
+      ...controlState.requestPayload
+    });
   } catch (error) {
     workflowExecutionStatus.textContent = error.message;
     return;
   }
 
-  if (!window.confirm(`Run this dry-run workflow command?\n\n${request.command}`)) {
+  if (!window.confirm(`Run this ${request.mode} workflow command?\n\n${request.command}`)) {
     workflowExecutionStatus.textContent = 'Execution cancelled.';
     return;
   }
 
   workflowExecuteButton.disabled = true;
-  workflowExecutionStatus.textContent = 'Running dry-run workflow...';
+  workflowExecutionStatus.textContent = `Running ${request.mode} workflow...`;
 
   try {
     const result = await fetchJson('/api/executions/run', {
@@ -285,8 +321,9 @@ async function executeWorkflowDryRun(event) {
       },
       body: JSON.stringify({
         ...request,
+        ...controlState.requestPayload,
         targetId: currentTargetId,
-        writeScope: readWorkflowExecutionRequest().writeScope || ['.'],
+        writeScope: formRequest.writeScope || ['.'],
         confirmed: true
       })
     });
@@ -768,6 +805,7 @@ async function runRoadmapItem(fileName, itemIndex, button) {
 
 function prefillWorkflowExecutionFromRoadmapRun(runResult) {
   const prefill = createWorkflowPrefillFromRoadmapRun(runResult);
+  prefill.generatedTaskReady = true;
   fillWorkflowExecutionForm(prefill);
   workflowExecutionStatus.textContent = `Ready to dry-run ${prefill.taskId}.`;
 }
@@ -779,6 +817,8 @@ function fillWorkflowExecutionForm(prefill) {
   workflowExecutionForm.elements.stepRunnerCommand.value = prefill.stepRunnerCommand;
   workflowExecutionForm.elements.logOut.value = prefill.logOut;
   workflowExecutionForm.elements.writeScope.value = prefill.writeScope;
+  workflowExecutionForm.elements.generatedTaskReady.value = prefill.generatedTaskReady === true ? 'true' : 'false';
+  workflowExecutionForm.elements.realExecutionConfirmation.value = '';
   renderWorkflowCommandPreview();
 }
 

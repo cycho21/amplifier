@@ -151,9 +151,10 @@ Validate before save.</textarea>
             <span>Mode</span>
             <select name="mode">
               <option value="dry-run">dry-run</option>
-              <option value="real" disabled>real blocked</option>
+              <option value="real">real</option>
             </select>
           </label>
+          <input name="generatedTaskReady" type="hidden" value="false">
           <label>
             <span>Step Runner</span>
             <input name="stepRunnerCommand" type="text" value="runner/codex.ps1">
@@ -166,11 +167,15 @@ Validate before save.</textarea>
             <span>Write Scope</span>
             <input name="writeScope" type="text" value="." placeholder="Repo-relative prefixes, comma separated">
           </label>
+          <label>
+            <span>Real Confirmation</span>
+            <input name="realExecutionConfirmation" type="text" placeholder="RUN REAL">
+          </label>
           <div class="execution-command">
             <span class="metric-label">Command</span>
             <pre id="workflow-command-preview"></pre>
           </div>
-          <p class="blocked-note">Real execution is blocked for this roadmap; `-Mode real` and `-AllowReal` are not available here.</p>
+          <p class="blocked-note">Real mode requires a generated task, write scope, and RUN REAL.</p>
           <div class="draft-actions">
             <p id="workflow-execution-status" class="muted compact-line" aria-live="polite">Ready.</p>
             <button id="workflow-execute" class="open-button" type="submit">Run dry-run workflow</button>
