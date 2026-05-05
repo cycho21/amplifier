@@ -24,9 +24,9 @@ Completed work includes:
 - Read-only local Operator UI for inspecting workflow logs, operational state,
   roadmap progress, and captured verification evidence.
 
-The project now has a stable runner and workflow core plus a read-only local
-operator UI. The next roadmap is a guarded local operator control surface for
-authoring roadmaps and launching explicit dry-run workflows.
+The project now has a stable runner and workflow core plus a local operator UI
+with guarded roadmap authoring and dry-run execution controls. The next roadmap
+is guarded real agent execution from the Operator UI.
 
 ## Roadmap Files
 
@@ -43,8 +43,10 @@ Read in this order:
 5. [Operator UI](roadmaps/NEXT_OPERATOR_UI.md): completed read-only local UI for
    workflow log inspection, operational status, roadmap status, and captured
    verification evidence.
-6. [Next: Operator Control](roadmaps/NEXT_OPERATOR_CONTROL.md): guarded local
+6. [Operator Control](roadmaps/NEXT_OPERATOR_CONTROL.md): completed guarded local
    authoring and execution controls for roadmaps and dry-run workflows.
+7. [Next: Real Agent Execution](roadmaps/NEXT_REAL_AGENT_EXECUTION.md): guarded
+   real execution controls for explicit, auditable Operator UI runs.
 
 ## High-Level Progress
 
@@ -53,7 +55,8 @@ Read in this order:
 - [x] Orchestration roadmap.
 - [x] Operations roadmap.
 - [x] Operator UI roadmap.
-- [ ] Operator Control roadmap.
+- [x] Operator Control roadmap.
+- [ ] Real Agent Execution roadmap.
 
 ## Rule For Future Roadmaps
 

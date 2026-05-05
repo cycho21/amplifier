@@ -25,7 +25,7 @@ In progress.
 
 1. [x] Add a guarded real execution request model that only allows `real` mode
    with explicit opt-in and emits `-AllowReal`.
-2. [ ] Add server-side real execution confirmation checks separate from dry-run
+2. [x] Add server-side real execution confirmation checks separate from dry-run
    confirmation.
 3. [ ] Add UI controls for real execution that are disabled until a generated
    task, write scope, and explicit real confirmation are present.

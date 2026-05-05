@@ -333,6 +333,65 @@ test('executeWorkflowRequest rejects cancelled confirmation, real mode, invalid 
   }
 });
 
+test('executeWorkflowRequest requires separate server confirmation for real mode', async () => {
+  const repoRoot = await mkdtemp(path.join(tmpdir(), 'operator-server-'));
+
+  try {
+    await mkdir(path.join(repoRoot, 'tasks'), { recursive: true });
+    await mkdir(path.join(repoRoot, 'workflows'), { recursive: true });
+    await mkdir(path.join(repoRoot, 'runner'), { recursive: true });
+    await writeFile(path.join(repoRoot, 'tasks', 'roadmap-NEXT-2.md'), '# Task\n');
+    await writeFile(path.join(repoRoot, 'workflows', 'implementation-review.yaml'), 'workflow: implementation-review\n');
+    await writeFile(path.join(repoRoot, 'runner', 'workflow.ps1'), '# workflow\n');
+    await writeFile(path.join(repoRoot, 'runner', 'codex.ps1'), '# codex\n');
+
+    await assert.rejects(
+      executeWorkflowRequest(
+        repoRoot,
+        {
+          confirmed: true,
+          taskId: 'roadmap-NEXT-2',
+          workflowSpec: 'workflows/implementation-review.yaml',
+          mode: 'real',
+          stepRunnerCommand: 'runner/codex.ps1',
+          allowRealExecution: true,
+          realExecutionConfirmation: 'RUN REAL'
+        }
+      ),
+      /Real execution server confirmation is required/
+    );
+
+    const result = await executeWorkflowRequest(
+      repoRoot,
+      {
+        confirmed: true,
+        realExecutionConfirmed: true,
+        taskId: 'roadmap-NEXT-2',
+        workflowSpec: 'workflows/implementation-review.yaml',
+        mode: 'real',
+        stepRunnerCommand: 'runner/codex.ps1',
+        allowRealExecution: true,
+        realExecutionConfirmation: 'RUN REAL'
+      },
+      {
+        timestamp: '2026-05-05T04:05:06.007Z',
+        invoke: async () => ({
+          stdout: 'real workflow invoked\n',
+          stderr: '',
+          exitCode: 0
+        })
+      }
+    );
+    const written = JSON.parse(await readFile(path.join(repoRoot, result.name), 'utf8'));
+
+    assert.match(written.output.execution.command, /-Mode "real"/);
+    assert.match(written.output.execution.command, /-AllowReal/);
+    assert.equal(written.output.execution.exit_code, 0);
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
 test('executeWorkflowRequest records failed dry-run command output', async () => {
   const repoRoot = await mkdtemp(path.join(tmpdir(), 'operator-server-'));
 

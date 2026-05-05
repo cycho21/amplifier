@@ -128,6 +128,11 @@ export async function executeWorkflowRequest(repoRoot = defaultRepoRoot, input =
   const request = createWorkflowExecutionRequest(input, {
     timestamp
   });
+
+  if (request.mode === 'real' && input.realExecutionConfirmed !== true) {
+    throw new Error('Real execution server confirmation is required before invoking a real local runner command.');
+  }
+
   request.writeScope = normalizeWriteScope(input.writeScope || ['.']);
   await assertExecutionInputFiles(operatorRoot, targetRoot, request);
 
