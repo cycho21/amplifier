@@ -37,3 +37,14 @@ fields.
 
 **Reason:** Structured logs make runner behavior comparable and provide the
 first debugging surface when outputs differ.
+
+## Decision 6: Operator Manages Target Repositories
+
+**Decision:** Treat Mini Amplifier as the operator/orchestrator and target
+repositories as the owners of their plans, tasks, and results.
+
+**Reason:** Shared execution assets should be maintained once in Mini
+Amplifier, while repository-specific roadmaps, generated tasks, and logs stay
+with the repository they describe.
+
+Details: `docs/plan/decisions/OPERATOR_TARGET_REPOS.md`.
