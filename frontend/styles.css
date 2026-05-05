@@ -741,6 +741,19 @@ textarea {
   white-space: pre-wrap;
 }
 
+.task-draft-preview {
+  max-block-size: min(620px, calc(100vh - 220px));
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f7f8fa;
+  color: var(--ink);
+  font: 12px/1.5 Consolas, Monaco, monospace;
+  white-space: pre-wrap;
+}
+
 .roadmap-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));

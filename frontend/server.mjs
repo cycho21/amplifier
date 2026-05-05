@@ -29,6 +29,15 @@ export async function readRoadmapFiles(repoRoot = defaultRepoRoot) {
   );
 }
 
+export async function readTaskDraft(repoRoot = defaultRepoRoot, fileName) {
+  const relativeName = normalizeTaskDraftFileName(fileName);
+
+  return {
+    name: toBrowserPath(relativeName),
+    content: await readFile(path.join(repoRoot, relativeName), 'utf8')
+  };
+}
+
 export async function saveRoadmapFile(repoRoot = defaultRepoRoot, fileName, content) {
   const relativeName = normalizeRoadmapFileName(fileName);
   const filePath = path.join(repoRoot, relativeName);
@@ -466,6 +475,12 @@ export function createOperatorServer(options = {}) {
         return;
       }
 
+      if (url.pathname === '/api/tasks/read') {
+        const target = await resolveTarget(operatorRoot, url.searchParams.get('targetId'));
+        await sendJson(response, await readTaskDraft(target.path, url.searchParams.get('name')));
+        return;
+      }
+
       if (url.pathname === '/api/roadmaps/save') {
         if (request.method !== 'POST') {
           response.writeHead(405);
@@ -617,6 +632,26 @@ function normalizeRoadmapFileName(fileName) {
   }
 
   return path.join('docs', 'plan', 'roadmaps', leafName);
+}
+
+function normalizeTaskDraftFileName(fileName) {
+  const normalized = typeof fileName === 'string' ? fileName.replace(/\\/g, '/') : '';
+  const taskPrefix = 'tasks/';
+  const leafName = normalized.startsWith(taskPrefix)
+    ? normalized.slice(taskPrefix.length)
+    : '';
+
+  if (
+    leafName.length === 0 ||
+    leafName.includes('/') ||
+    leafName.includes('..') ||
+    !leafName.startsWith('roadmap-') ||
+    !leafName.toLowerCase().endsWith('.md')
+  ) {
+    throw new Error('Task draft file must be a generated roadmap task under tasks/.');
+  }
+
+  return path.join('tasks', leafName);
 }
 
 async function readJsonRequest(request) {

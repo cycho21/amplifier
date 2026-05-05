@@ -8,6 +8,7 @@ import {
   executeWorkflowRequest,
   readLogFiles,
   readRoadmapFiles,
+  readTaskDraft,
   runRoadmapItem,
   saveRoadmapFile
 } from './server.mjs';
@@ -172,6 +173,34 @@ test('runRoadmapItem writes generated tasks and logs into the selected target re
   } finally {
     await rm(operatorRoot, { recursive: true, force: true });
     await rm(targetRoot, { recursive: true, force: true });
+  }
+});
+
+test('readTaskDraft reads only generated roadmap task drafts from the target repo', async () => {
+  const repoRoot = await mkdtemp(path.join(tmpdir(), 'operator-server-'));
+
+  try {
+    await mkdir(path.join(repoRoot, 'tasks'), { recursive: true });
+    await writeFile(path.join(repoRoot, 'tasks', 'roadmap-NEXT-1.md'), '# Draft\n');
+    await writeFile(path.join(repoRoot, 'tasks', '000_template.md'), '# Template\n');
+
+    assert.deepEqual(
+      await readTaskDraft(repoRoot, 'tasks/roadmap-NEXT-1.md'),
+      {
+        name: 'tasks/roadmap-NEXT-1.md',
+        content: '# Draft\n'
+      }
+    );
+    await assert.rejects(
+      readTaskDraft(repoRoot, 'tasks/000_template.md'),
+      /Task draft file must be a generated roadmap task/
+    );
+    await assert.rejects(
+      readTaskDraft(repoRoot, 'tasks/../docs/plan/roadmaps/NEXT.md'),
+      /Task draft file must be a generated roadmap task/
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
   }
 });
 

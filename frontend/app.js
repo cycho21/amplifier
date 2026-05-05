@@ -734,7 +734,7 @@ async function runRoadmapItem(fileName, itemIndex, button) {
   button.disabled = true;
 
   try {
-    await fetchJson('/api/roadmaps/run', {
+    const result = await fetchJson('/api/roadmaps/run', {
       method: 'POST',
       headers: {
         'content-type': 'application/json'
@@ -746,11 +746,60 @@ async function runRoadmapItem(fileName, itemIndex, button) {
       })
     });
     await loadLocalData();
+    await openGeneratedTaskDraft(result);
   } catch (error) {
     renderLoadFailure(error);
   } finally {
     button.disabled = false;
   }
+}
+
+async function openGeneratedTaskDraft(runResult) {
+  const taskFile = getGeneratedTaskFile(runResult);
+
+  if (!taskFile) {
+    return;
+  }
+
+  const task = await fetchJson(
+    `/api/tasks/read?targetId=${encodeURIComponent(currentTargetId)}&name=${encodeURIComponent(taskFile)}`
+  );
+
+  renderTaskDraftViewer(task);
+}
+
+function getGeneratedTaskFile(runResult) {
+  try {
+    const log = JSON.parse(runResult.content || '{}');
+    return log?.output?.roadmap_item?.task_file || '';
+  } catch (error) {
+    return '';
+  }
+}
+
+function renderTaskDraftViewer(task) {
+  const header = document.createElement('header');
+  header.className = 'roadmap-card-header';
+
+  const titleGroup = document.createElement('div');
+  const title = document.createElement('h3');
+  title.textContent = 'Generated Task Draft';
+  const file = document.createElement('p');
+  file.className = 'muted compact-line';
+  file.textContent = task.name;
+  titleGroup.append(title, file);
+
+  const badge = document.createElement('span');
+  badge.className = 'status-badge';
+  badge.textContent = 'Ready';
+  header.append(titleGroup, badge);
+
+  const preview = document.createElement('pre');
+  preview.className = 'task-draft-preview';
+  preview.textContent = task.content;
+
+  roadmapReviewBody.replaceChildren(header, preview);
+  showRoadmapReviewModal();
 }
 
 function selectRun(index) {
