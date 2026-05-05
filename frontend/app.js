@@ -356,7 +356,7 @@ function syncMarkdownPreviewHeight(summary, previewSection) {
     const gap = Number.parseFloat(previewStyle.rowGap || previewStyle.gap) || 0;
     const previewHeight = Math.max(0, Math.floor(summaryHeight - headingHeight - gap));
 
-    preview.style.blockSize = `${previewHeight}px`;
+    previewSection.style.setProperty('--markdown-preview-block-size', `${previewHeight}px`);
   });
 }
 
