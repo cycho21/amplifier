@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,6 +17,17 @@ export async function readRoadmapFiles(repoRoot = defaultRepoRoot) {
     path.join('docs', 'plan', 'roadmaps'),
     '.md'
   );
+}
+
+export async function saveRoadmapFile(repoRoot = defaultRepoRoot, fileName, content) {
+  const relativeName = normalizeRoadmapFileName(fileName);
+  const filePath = path.join(repoRoot, relativeName);
+  await writeFile(filePath, content, 'utf8');
+
+  return {
+    name: toBrowserPath(relativeName),
+    content
+  };
 }
 
 export function createOperatorServer(options = {}) {
@@ -37,12 +48,53 @@ export function createOperatorServer(options = {}) {
         return;
       }
 
+      if (url.pathname === '/api/roadmaps/save') {
+        if (request.method !== 'POST') {
+          response.writeHead(405);
+          response.end('Method not allowed');
+          return;
+        }
+
+        const body = await readJsonRequest(request);
+        await sendJson(response, await saveRoadmapFile(repoRoot, body.name, body.content));
+        return;
+      }
+
       await sendStatic(response, staticRoot, url.pathname);
     } catch (error) {
       response.writeHead(500, { 'content-type': 'application/json; charset=utf-8' });
       response.end(JSON.stringify({ error: error.message }));
     }
   });
+}
+
+function normalizeRoadmapFileName(fileName) {
+  const normalized = typeof fileName === 'string' ? fileName.replace(/\\/g, '/') : '';
+  const roadmapPrefix = 'docs/plan/roadmaps/';
+  const leafName = normalized.startsWith(roadmapPrefix)
+    ? normalized.slice(roadmapPrefix.length)
+    : '';
+
+  if (
+    leafName.length === 0 ||
+    leafName.includes('/') ||
+    leafName.includes('..') ||
+    !leafName.toLowerCase().endsWith('.md')
+  ) {
+    throw new Error('Roadmap file must be a top-level markdown file under docs/plan/roadmaps.');
+  }
+
+  return path.join('docs', 'plan', 'roadmaps', leafName);
+}
+
+async function readJsonRequest(request) {
+  let body = '';
+
+  for await (const chunk of request) {
+    body += chunk;
+  }
+
+  return JSON.parse(body || '{}');
 }
 
 async function readDirectoryFiles(directory, relativeDirectory, extension) {

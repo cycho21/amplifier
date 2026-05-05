@@ -7,7 +7,7 @@ launching explicit dry-run workflow executions from the local UI.
 
 ## Status
 
-Not started.
+In progress.
 
 ## Principles
 
@@ -24,14 +24,14 @@ Not started.
 
 ## Sequence
 
-1. [ ] Add a roadmap draft model for title, goal, status, principles, sequence,
+1. [x] Add a roadmap draft model for title, goal, status, principles, sequence,
    acceptance criteria, and out-of-scope sections.
-2. [ ] Add tests for roadmap draft validation, required sections, and checklist
+2. [x] Add tests for roadmap draft validation, required sections, and checklist
    shape.
-3. [ ] Add a local roadmap authoring UI that creates an in-browser draft without
+3. [x] Add a local roadmap authoring UI that creates an in-browser draft without
    writing files.
-4. [ ] Add markdown preview and export for roadmap drafts.
-5. [ ] Add an explicit local save control for roadmap drafts under
+4. [x] Add markdown preview and export for roadmap drafts.
+5. [x] Add an explicit local save control for roadmap drafts under
    `docs/plan/roadmaps/`, guarded by validation and confirmation.
 6. [ ] Add a workflow execution request model that binds task id, workflow spec,
    mode, step runner command, and log output path.
@@ -51,6 +51,8 @@ Not started.
 
 - Operators can draft and preview a roadmap without mutating repository files.
 - Roadmap writes require validation and an explicit save action.
+- Existing roadmap files can be loaded into the draft editor and overwritten
+  only after confirmation.
 - Invalid roadmap drafts cannot be saved.
 - Workflow execution controls are dry-run only.
 - Every execution request shows the exact command before it can run.
@@ -66,6 +68,5 @@ Not started.
 - Multi-user approvals.
 - Authentication.
 - Database-backed persistence.
-- Editing existing roadmap files in place.
 - Editing workflow specs, task files, contracts, agents, execution specs, or
   memory files from the UI.

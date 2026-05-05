@@ -40,34 +40,94 @@
         </div>
       </section>
 
-      <section class="workspace">
-        <aside class="run-list-panel" aria-label="Workflow logs">
-          <div class="panel-heading">
-            <h2>Runs</h2>
-          </div>
-          <div id="run-list" class="run-list empty">
-            <p>No logs loaded.</p>
-          </div>
-          <div id="error-list" class="error-list" aria-live="polite"></div>
-        </aside>
+      <details class="collapsible-section runs-section" open>
+        <summary class="collapsible-heading">
+          <span>Runs</span>
+          <span class="collapse-hint">Toggle</span>
+        </summary>
+        <section class="workspace">
+          <aside class="run-list-panel" aria-label="Workflow logs">
+            <div id="run-list" class="run-list empty">
+              <p>No logs loaded.</p>
+            </div>
+            <div id="error-list" class="error-list" aria-live="polite"></div>
+          </aside>
 
-        <section class="inspector" aria-label="Run inspector">
-          <div id="inspector-empty" class="empty-state">
-            <p>No run selected.</p>
-          </div>
-          <article id="inspector" class="inspector-body" hidden></article>
+          <section class="inspector" aria-label="Run inspector">
+            <div id="inspector-empty" class="empty-state">
+              <p>No run selected.</p>
+            </div>
+            <article id="inspector" class="inspector-body" hidden></article>
+          </section>
         </section>
-      </section>
+      </details>
 
-      <section class="roadmap-dashboard" aria-label="Roadmap dashboard">
-        <div class="panel-heading">
-          <h2>Roadmaps</h2>
-        </div>
+      <details class="roadmap-authoring collapsible-section" open>
+        <summary class="collapsible-heading">
+          <span>Roadmap Draft</span>
+          <span class="collapse-hint">Toggle</span>
+        </summary>
+        <form id="roadmap-draft-form" class="draft-form">
+          <label>
+            <span>Title</span>
+            <input name="title" type="text" value="Next Roadmap: Operator Control">
+          </label>
+          <label>
+            <span>Goal</span>
+            <textarea name="goal" rows="3">Build local operator controls.</textarea>
+          </label>
+          <label>
+            <span>Status</span>
+            <select name="status">
+              <option>Not started.</option>
+              <option>In progress.</option>
+              <option>Completed.</option>
+            </select>
+          </label>
+          <label>
+            <span>Principles</span>
+            <textarea name="principles" rows="4">Draft first.
+Validate before save.</textarea>
+          </label>
+          <label>
+            <span>Sequence</span>
+            <textarea name="sequence" rows="4">Add a local roadmap authoring UI.</textarea>
+          </label>
+          <label>
+            <span>Acceptance Criteria</span>
+            <textarea name="acceptanceCriteria" rows="4">Operators can create an in-browser draft without writing files.</textarea>
+          </label>
+          <label>
+            <span>Out Of Scope</span>
+            <textarea name="outOfScope" rows="4">Writing roadmap files.</textarea>
+          </label>
+          <button class="open-button" type="submit">Review draft</button>
+        </form>
+      </details>
+
+      <dialog id="roadmap-review-modal" class="review-modal" aria-labelledby="roadmap-review-title">
+        <article class="review-dialog">
+          <header class="review-header">
+            <div>
+              <p class="eyebrow">Roadmap Review</p>
+              <h2 id="roadmap-review-title">Review Draft</h2>
+            </div>
+            <button id="roadmap-review-close" class="open-button secondary compact" type="button">Close</button>
+          </header>
+          <div id="roadmap-review-body" class="review-body" aria-live="polite"></div>
+        </article>
+      </dialog>
+
+      <details class="roadmap-dashboard collapsible-section" open>
+        <summary class="collapsible-heading">
+          <span>Roadmaps</span>
+          <span class="collapse-hint">Toggle</span>
+        </summary>
         <div id="roadmap-list" class="roadmap-list empty">
           <p>No roadmaps loaded.</p>
         </div>
         <div id="roadmap-error-list" class="error-list" aria-live="polite"></div>
-      </section>
+      </details>
     </main>
 
     <script type="module" src="./app.js"></script>

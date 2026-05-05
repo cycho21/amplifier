@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { readLogFiles, readRoadmapFiles } from './server.mjs';
+import { readLogFiles, readRoadmapFiles, saveRoadmapFile } from './server.mjs';
 
 test('readLogFiles reads top-level JSON logs from the repo logs folder', async () => {
   const repoRoot = await mkdtemp(path.join(tmpdir(), 'operator-server-'));
@@ -44,6 +44,45 @@ test('readRoadmapFiles reads markdown files from docs/plan/roadmaps', async () =
         content: '# Next\n'
       }
     ]);
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test('saveRoadmapFile overwrites a roadmap file under docs/plan/roadmaps', async () => {
+  const repoRoot = await mkdtemp(path.join(tmpdir(), 'operator-server-'));
+
+  try {
+    await mkdir(path.join(repoRoot, 'docs', 'plan', 'roadmaps'), { recursive: true });
+    const saved = await saveRoadmapFile(
+      repoRoot,
+      'docs/plan/roadmaps/NEXT.md',
+      '# Updated\n'
+    );
+
+    assert.deepEqual(saved, {
+      name: 'docs/plan/roadmaps/NEXT.md',
+      content: '# Updated\n'
+    });
+    assert.equal(
+      await readFile(path.join(repoRoot, 'docs', 'plan', 'roadmaps', 'NEXT.md'), 'utf8'),
+      '# Updated\n'
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test('saveRoadmapFile rejects paths outside docs/plan/roadmaps', async () => {
+  const repoRoot = await mkdtemp(path.join(tmpdir(), 'operator-server-'));
+
+  try {
+    await mkdir(path.join(repoRoot, 'docs', 'plan', 'roadmaps'), { recursive: true });
+
+    await assert.rejects(
+      saveRoadmapFile(repoRoot, 'docs/plan/roadmaps/../DECISIONS.md', '# Bad\n'),
+      /Roadmap file must be a top-level markdown file/
+    );
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
   }

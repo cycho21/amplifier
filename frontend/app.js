@@ -1,7 +1,17 @@
 import { summarizeRuns } from './logParser.mjs';
+import {
+  createRoadmapDraftExport,
+  createRoadmapDraftFromFormData,
+  createRoadmapDraftFromMarkdown,
+  validateRoadmapDraft
+} from './roadmapDraft.mjs';
 import { summarizeRoadmaps } from './roadmapParser.mjs';
 
 const refreshButton = document.querySelector('#refresh-data');
+const roadmapDraftForm = document.querySelector('#roadmap-draft-form');
+const roadmapReviewModal = document.querySelector('#roadmap-review-modal');
+const roadmapReviewClose = document.querySelector('#roadmap-review-close');
+const roadmapReviewBody = document.querySelector('#roadmap-review-body');
 const runList = document.querySelector('#run-list');
 const errorList = document.querySelector('#error-list');
 const roadmapList = document.querySelector('#roadmap-list');
@@ -14,8 +24,13 @@ const stepCount = document.querySelector('#step-count');
 const roadmapCount = document.querySelector('#roadmap-count');
 
 let currentRuns = [];
+let currentRoadmapDraftExport = null;
+let currentRoadmapFiles = [];
+let editingRoadmapName = null;
 
 refreshButton.addEventListener('click', loadLocalData);
+roadmapDraftForm.addEventListener('submit', createLocalRoadmapDraft);
+roadmapReviewClose.addEventListener('click', () => roadmapReviewModal.close());
 loadLocalData();
 
 async function loadLocalData() {
@@ -27,6 +42,7 @@ async function loadLocalData() {
       fetchJson('/api/roadmaps')
     ]);
 
+    currentRoadmapFiles = roadmapFiles;
     renderLogSummary(summarizeRuns(logFiles));
     renderRoadmapSummary(summarizeRoadmaps(roadmapFiles));
   } catch (error) {
@@ -36,8 +52,8 @@ async function loadLocalData() {
   }
 }
 
-async function fetchJson(path) {
-  const response = await fetch(path);
+async function fetchJson(path, options) {
+  const response = await fetch(path, options);
 
   if (!response.ok) {
     throw new Error(`${path} returned ${response.status}`);
@@ -180,6 +196,204 @@ function renderRoadmapErrors(errors) {
   }
 }
 
+function createLocalRoadmapDraft(event) {
+  event.preventDefault();
+
+  const draft = createRoadmapDraftFromFormData(new FormData(roadmapDraftForm));
+  const validation = validateRoadmapDraft(draft);
+
+  if (!validation.ok) {
+    renderRoadmapDraftErrors(validation.errors);
+    return;
+  }
+
+  renderRoadmapDraft(draft);
+}
+
+function renderRoadmapDraftErrors(errors) {
+  currentRoadmapDraftExport = null;
+  roadmapReviewBody.replaceChildren(renderTextList('Draft errors', errors.map((error) => error.message)));
+  showRoadmapReviewModal();
+}
+
+function renderRoadmapDraft(draft) {
+  currentRoadmapDraftExport = createRoadmapDraftExport(draft);
+  const summary = document.createElement('div');
+  summary.className = 'review-summary';
+  summary.append(
+    renderDraftHeader(draft),
+    renderDraftStats(draft),
+    renderTextList('Principles', draft.principles),
+    renderTextList('Sequence', draft.sequence.map((item) => item.text)),
+    renderTextList('Acceptance Criteria', draft.acceptanceCriteria),
+    renderTextList('Out Of Scope', draft.outOfScope)
+  );
+
+  const content = document.createElement('div');
+  content.className = 'review-content';
+  content.append(summary, renderMarkdownPreview(currentRoadmapDraftExport));
+
+  roadmapReviewBody.replaceChildren(
+    content,
+    renderDraftActions(currentRoadmapDraftExport)
+  );
+  showRoadmapReviewModal();
+}
+
+function showRoadmapReviewModal() {
+  if (roadmapReviewModal.open) {
+    return;
+  }
+
+  if (typeof roadmapReviewModal.showModal === 'function') {
+    roadmapReviewModal.showModal();
+  } else {
+    roadmapReviewModal.setAttribute('open', '');
+  }
+}
+
+function renderDraftHeader(draft) {
+  const header = document.createElement('header');
+  header.className = 'roadmap-card-header';
+  const titleGroup = document.createElement('div');
+  const title = document.createElement('h3');
+  title.textContent = draft.title;
+  const file = document.createElement('p');
+  file.className = 'muted compact-line';
+  file.textContent = editingRoadmapName || 'In-browser draft';
+  titleGroup.append(title, file);
+
+  const status = document.createElement('span');
+  status.className = 'status-badge';
+  status.textContent = draft.status;
+  header.append(titleGroup, status);
+  return header;
+}
+
+function renderDraftStats(draft) {
+  const grid = document.createElement('div');
+  grid.className = 'status-grid compact';
+  grid.append(
+    renderMetric('Principles', draft.principles.length),
+    renderMetric('Steps', draft.sequence.length),
+    renderMetric('Criteria', draft.acceptanceCriteria.length),
+    renderMetric('Out of scope', draft.outOfScope.length)
+  );
+  return grid;
+}
+
+function renderDraftActions(exported) {
+  const actions = document.createElement('div');
+  actions.className = 'draft-actions';
+  const fileName = document.createElement('span');
+  fileName.className = 'muted compact-line';
+  fileName.textContent = editingRoadmapName || exported.fileName;
+  const exportButton = document.createElement('button');
+  exportButton.className = 'open-button secondary';
+  exportButton.type = 'button';
+  exportButton.textContent = 'Export markdown';
+  exportButton.addEventListener('click', exportCurrentRoadmapDraft);
+
+  if (editingRoadmapName) {
+    const saveButton = document.createElement('button');
+    saveButton.className = 'open-button';
+    saveButton.type = 'button';
+    saveButton.textContent = 'Save changes';
+    saveButton.addEventListener('click', saveCurrentRoadmapDraft);
+    actions.append(fileName, saveButton, exportButton);
+  } else {
+    actions.append(fileName, exportButton);
+  }
+
+  return actions;
+}
+
+function renderMarkdownPreview(exported) {
+  const section = document.createElement('section');
+  section.className = 'review-preview';
+  const heading = document.createElement('h3');
+  heading.textContent = 'Markdown';
+  const preview = document.createElement('pre');
+  preview.className = 'markdown-preview';
+  preview.textContent = exported.content;
+  section.append(heading, preview);
+  return section;
+}
+
+function exportCurrentRoadmapDraft() {
+  if (!currentRoadmapDraftExport) {
+    return;
+  }
+
+  const blob = new Blob([currentRoadmapDraftExport.content], {
+    type: currentRoadmapDraftExport.mimeType
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = currentRoadmapDraftExport.fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function saveCurrentRoadmapDraft() {
+  if (!editingRoadmapName) {
+    return;
+  }
+
+  const draft = createRoadmapDraftFromFormData(new FormData(roadmapDraftForm));
+  const validation = validateRoadmapDraft(draft);
+
+  if (!validation.ok) {
+    renderRoadmapDraftErrors(validation.errors);
+    return;
+  }
+
+  const exported = createRoadmapDraftExport(draft);
+
+  if (!window.confirm(`Overwrite ${editingRoadmapName}?`)) {
+    return;
+  }
+
+  await fetchJson('/api/roadmaps/save', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      name: editingRoadmapName,
+      content: exported.content
+    })
+  });
+  currentRoadmapDraftExport = exported;
+  await loadLocalData();
+}
+
+function editRoadmapDraft(fileName) {
+  const file = currentRoadmapFiles.find((roadmapFile) => roadmapFile.name === fileName);
+
+  if (!file) {
+    return;
+  }
+
+  editingRoadmapName = file.name;
+  const draft = createRoadmapDraftFromMarkdown(file.content);
+  fillRoadmapDraftForm(draft);
+  currentRoadmapDraftExport = null;
+}
+
+function fillRoadmapDraftForm(draft) {
+  roadmapDraftForm.elements.title.value = draft.title;
+  roadmapDraftForm.elements.goal.value = draft.goal;
+  roadmapDraftForm.elements.status.value = draft.status;
+  roadmapDraftForm.elements.principles.value = draft.principles.join('\n');
+  roadmapDraftForm.elements.sequence.value = draft.sequence
+    .map((item, index) => `${index + 1}. [${item.done ? 'x' : ' '}] ${item.text}`)
+    .join('\n');
+  roadmapDraftForm.elements.acceptanceCriteria.value = draft.acceptanceCriteria.join('\n');
+  roadmapDraftForm.elements.outOfScope.value = draft.outOfScope.join('\n');
+}
+
 function renderRoadmapCard(roadmap) {
   const card = document.createElement('article');
   card.className = 'roadmap-card';
@@ -197,7 +411,15 @@ function renderRoadmapCard(roadmap) {
   const status = document.createElement('span');
   status.className = 'status-badge';
   status.textContent = roadmap.status;
-  header.append(titleGroup, status);
+  const editButton = document.createElement('button');
+  editButton.className = 'open-button secondary compact';
+  editButton.type = 'button';
+  editButton.textContent = 'Edit';
+  editButton.addEventListener('click', () => editRoadmapDraft(roadmap.fileName));
+  const actions = document.createElement('div');
+  actions.className = 'roadmap-card-actions';
+  actions.append(status, editButton);
+  header.append(titleGroup, actions);
 
   const progress = document.createElement('progress');
   progress.max = roadmap.totalCount;

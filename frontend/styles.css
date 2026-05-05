@@ -25,7 +25,9 @@ body {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
 }
 
@@ -94,6 +96,12 @@ input {
   color: var(--accent);
 }
 
+.open-button.compact {
+  min-block-size: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
 .open-button:focus-within,
 .open-button:hover {
   background: #185abc;
@@ -136,6 +144,45 @@ input {
   display: grid;
   grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
   min-block-size: 560px;
+}
+
+.collapsible-section {
+  border-block-end: 1px solid var(--line);
+}
+
+.collapsible-heading {
+  display: flex;
+  align-items: center;
+  justify-content: start;
+  gap: 12px;
+  padding: 16px 20px;
+  background: var(--panel);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 750;
+  list-style: none;
+}
+
+.collapsible-heading::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible-heading::before {
+  content: '▾';
+  color: var(--accent);
+  font-size: 14px;
+}
+
+.collapsible-section:not([open]) .collapsible-heading::before {
+  content: '▸';
+}
+
+.collapse-hint {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  margin-inline-start: auto;
+  text-transform: uppercase;
 }
 
 .run-list-panel {
@@ -251,6 +298,10 @@ input {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
+}
+
+.status-grid.compact {
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
 }
 
 .status-cell {
@@ -448,6 +499,132 @@ input {
   background: #f2f5f8;
 }
 
+.roadmap-authoring {
+  background: #ffffff;
+}
+
+.draft-form {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  max-inline-size: 980px;
+  padding: 0 20px 20px;
+}
+
+.draft-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.draft-form input,
+.draft-form select,
+.draft-form textarea {
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--ink);
+  font-weight: 400;
+}
+
+.draft-form textarea {
+  resize: vertical;
+}
+
+.draft-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-block-start: 10px;
+  border-block-start: 1px solid var(--line);
+}
+
+.review-modal {
+  inline-size: min(1060px, calc(100vw - 36px));
+  max-block-size: calc(100vh - 48px);
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.review-modal::backdrop {
+  background: rgba(32, 36, 42, 0.4);
+}
+
+.review-dialog {
+  display: grid;
+  gap: 14px;
+  max-block-size: calc(100vh - 48px);
+  padding: 18px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.review-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block-end: 12px;
+  border-block-end: 1px solid var(--line);
+}
+
+.review-header h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.review-body {
+  display: grid;
+  gap: 12px;
+}
+
+.review-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+  gap: 14px;
+  min-block-size: 0;
+}
+
+.review-summary,
+.review-preview {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-inline-size: 0;
+}
+
+.review-preview {
+  max-block-size: 560px;
+}
+
+.review-preview h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.markdown-preview {
+  max-block-size: 520px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f7f8fa;
+  color: var(--ink);
+  font: 12px/1.5 Consolas, Monaco, monospace;
+  white-space: pre-wrap;
+}
+
 .roadmap-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -476,6 +653,13 @@ input {
   align-items: start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.roadmap-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
 }
 
 .roadmap-card h3 {
@@ -582,6 +766,10 @@ input {
     border-block-end: 1px solid var(--line);
   }
 
+  .review-content {
+    grid-template-columns: 1fr;
+  }
+
   .status-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -596,6 +784,16 @@ input {
 
   .memory-grid {
     grid-template-columns: 1fr;
+  }
+
+  .draft-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .review-header {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .inspector-body {
