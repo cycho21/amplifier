@@ -591,6 +591,7 @@ textarea {
 .review-content {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+  align-items: stretch;
   gap: 14px;
   min-block-size: 0;
 }
@@ -604,7 +605,9 @@ textarea {
 }
 
 .review-preview {
-  max-block-size: 560px;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
+  min-block-size: 0;
 }
 
 .review-preview h3 {
@@ -612,8 +615,23 @@ textarea {
   font-size: 15px;
 }
 
+.review-sequence {
+  margin: 0;
+  padding-inline-start: 22px;
+}
+
+.review-sequence li {
+  margin-block: 4px;
+  overflow-wrap: anywhere;
+}
+
+.review-sequence li.done {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
 .markdown-preview {
-  max-block-size: 520px;
+  box-sizing: border-box;
   margin: 0;
   padding: 12px;
   overflow: auto;

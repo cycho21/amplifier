@@ -224,20 +224,22 @@ function renderRoadmapDraft(draft) {
     renderDraftHeader(draft),
     renderDraftStats(draft),
     renderTextList('Principles', draft.principles),
-    renderTextList('Sequence', draft.sequence.map((item) => item.text)),
+    renderDraftSequence(draft.sequence),
     renderTextList('Acceptance Criteria', draft.acceptanceCriteria),
     renderTextList('Out Of Scope', draft.outOfScope)
   );
 
   const content = document.createElement('div');
   content.className = 'review-content';
-  content.append(summary, renderMarkdownPreview(currentRoadmapDraftExport));
+  const preview = renderMarkdownPreview(currentRoadmapDraftExport);
+  content.append(summary, preview);
 
   roadmapReviewBody.replaceChildren(
     content,
     renderDraftActions(currentRoadmapDraftExport)
   );
   showRoadmapReviewModal();
+  syncMarkdownPreviewHeight(summary, preview);
 }
 
 function showRoadmapReviewModal() {
@@ -282,6 +284,25 @@ function renderDraftStats(draft) {
   return grid;
 }
 
+function renderDraftSequence(sequence) {
+  const section = document.createElement('section');
+  section.className = 'detail-section';
+  const heading = document.createElement('h3');
+  heading.textContent = 'Sequence';
+  const list = document.createElement('ol');
+  list.className = 'review-sequence';
+
+  for (const item of sequence) {
+    const row = document.createElement('li');
+    row.className = item.done ? 'done' : '';
+    row.textContent = item.text;
+    list.append(row);
+  }
+
+  section.append(heading, list);
+  return section;
+}
+
 function renderDraftActions(exported) {
   const actions = document.createElement('div');
   actions.className = 'draft-actions';
@@ -318,6 +339,25 @@ function renderMarkdownPreview(exported) {
   preview.textContent = exported.content;
   section.append(heading, preview);
   return section;
+}
+
+function syncMarkdownPreviewHeight(summary, previewSection) {
+  const preview = previewSection.querySelector('.markdown-preview');
+  const heading = previewSection.querySelector('h3');
+
+  if (!preview) {
+    return;
+  }
+
+  requestAnimationFrame(() => {
+    const summaryHeight = summary.getBoundingClientRect().height;
+    const headingHeight = heading ? heading.getBoundingClientRect().height : 0;
+    const previewStyle = getComputedStyle(previewSection);
+    const gap = Number.parseFloat(previewStyle.rowGap || previewStyle.gap) || 0;
+    const previewHeight = Math.max(0, Math.floor(summaryHeight - headingHeight - gap));
+
+    preview.style.blockSize = `${previewHeight}px`;
+  });
 }
 
 function exportCurrentRoadmapDraft() {
@@ -433,7 +473,7 @@ function renderRoadmapCard(roadmap) {
   progressText.className = 'muted compact-line';
   progressText.textContent = `${roadmap.completedCount}/${roadmap.totalCount} complete`;
 
-  const list = document.createElement('ul');
+  const list = document.createElement('ol');
   list.className = 'roadmap-items';
   for (const item of roadmap.items) {
     const row = document.createElement('li');
