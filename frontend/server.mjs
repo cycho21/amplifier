@@ -42,6 +42,23 @@ export async function readExecutionRunIndex(operatorRoot = defaultRepoRoot) {
   return readRunIndex(path.join(operatorRoot, '.operator', 'runs.json'));
 }
 
+export async function readExecutionOptions(operatorRoot = defaultRepoRoot, targetRoot = operatorRoot) {
+  const [tasks, workflows, runners] = await Promise.all([
+    readDirectoryFileNames(path.join(targetRoot, 'tasks'), 'tasks', '.md'),
+    readDirectoryFileNames(path.join(operatorRoot, 'workflows'), 'workflows', '.yaml'),
+    readDirectoryFileNames(path.join(operatorRoot, 'runner'), 'runner', '.ps1')
+  ]);
+
+  return {
+    tasks: tasks.map((filePath) => ({
+      taskId: path.basename(filePath, path.extname(filePath)),
+      path: filePath
+    })),
+    workflows,
+    stepRunners: runners.filter((filePath) => filePath !== 'runner/workflow.ps1')
+  };
+}
+
 export async function saveRoadmapFile(repoRoot = defaultRepoRoot, fileName, content) {
   const relativeName = normalizeRoadmapFileName(fileName);
   const filePath = path.join(repoRoot, relativeName);
@@ -599,6 +616,18 @@ export function createOperatorServer(options = {}) {
         return;
       }
 
+      if (url.pathname === '/api/execution-options') {
+        if (request.method !== 'GET') {
+          response.writeHead(405);
+          response.end('Method not allowed');
+          return;
+        }
+
+        const target = await resolveTarget(operatorRoot, url.searchParams.get('targetId'));
+        await sendJson(response, await readExecutionOptions(operatorRoot, target.path));
+        return;
+      }
+
       await sendStatic(response, staticRoot, url.pathname);
     } catch (error) {
       response.writeHead(500, { 'content-type': 'application/json; charset=utf-8' });
@@ -767,6 +796,25 @@ async function readDirectoryFiles(directory, relativeDirectory, extension) {
       content: await readFile(path.join(directory, fileName), 'utf8')
     }))
   );
+}
+
+async function readDirectoryFileNames(directory, relativeDirectory, extension) {
+  let entries;
+
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return [];
+    }
+
+    throw error;
+  }
+
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(extension))
+    .map((entry) => toBrowserPath(path.join(relativeDirectory, entry.name)))
+    .sort((left, right) => left.localeCompare(right));
 }
 
 async function sendJson(response, value) {

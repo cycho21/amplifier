@@ -141,11 +141,15 @@ Validate before save.</textarea>
         <form id="workflow-execution-form" class="execution-form">
           <label>
             <span>Task ID</span>
-            <input name="taskId" type="text" value="000_template">
+            <select name="taskId">
+              <option value="000_template">000_template</option>
+            </select>
           </label>
           <label>
             <span>Workflow Spec</span>
-            <input name="workflowSpec" type="text" value="workflows/implementation-review.yaml">
+            <select name="workflowSpec">
+              <option value="workflows/implementation-review.yaml">workflows/implementation-review.yaml</option>
+            </select>
           </label>
           <label>
             <span>Mode</span>
@@ -157,7 +161,9 @@ Validate before save.</textarea>
           <input name="generatedTaskReady" type="hidden" value="false">
           <label>
             <span>Step Runner</span>
-            <input name="stepRunnerCommand" type="text" value="runner/codex.ps1">
+            <select name="stepRunnerCommand">
+              <option value="runner/codex.ps1">runner/codex.ps1</option>
+            </select>
           </label>
           <label>
             <span>Log Output</span>

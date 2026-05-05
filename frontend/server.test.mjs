@@ -7,6 +7,7 @@ import test from 'node:test';
 import {
   executeWorkflowRequest,
   readExecutionRunIndex,
+  readExecutionOptions,
   readLogFiles,
   readRoadmapFiles,
   readTaskDraft,
@@ -33,6 +34,41 @@ test('readLogFiles reads top-level JSON logs from the repo logs folder', async (
     ]);
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test('readExecutionOptions lists existing tasks, workflows, and step runners', async () => {
+  const operatorRoot = await mkdtemp(path.join(tmpdir(), 'operator-app-'));
+  const targetRoot = await mkdtemp(path.join(tmpdir(), 'operator-target-'));
+
+  try {
+    await mkdir(path.join(operatorRoot, 'workflows'), { recursive: true });
+    await mkdir(path.join(operatorRoot, 'runner'), { recursive: true });
+    await mkdir(path.join(targetRoot, 'tasks'), { recursive: true });
+    await writeFile(path.join(operatorRoot, 'workflows', 'parallel-review.yaml'), 'workflow: parallel-review\n');
+    await writeFile(path.join(operatorRoot, 'workflows', 'notes.txt'), 'ignore\n');
+    await writeFile(path.join(operatorRoot, 'runner', 'codex.ps1'), '# codex\n');
+    await writeFile(path.join(operatorRoot, 'runner', 'fake-real.ps1'), '# fake\n');
+    await writeFile(path.join(operatorRoot, 'runner', 'workflow.ps1'), '# workflow\n');
+    await writeFile(path.join(targetRoot, 'tasks', 'roadmap-NEXT-8.md'), '# Task\n');
+    await writeFile(path.join(targetRoot, 'tasks', 'notes.txt'), 'ignore\n');
+
+    assert.deepEqual(await readExecutionOptions(operatorRoot, targetRoot), {
+      tasks: [
+        {
+          taskId: 'roadmap-NEXT-8',
+          path: 'tasks/roadmap-NEXT-8.md'
+        }
+      ],
+      workflows: ['workflows/parallel-review.yaml'],
+      stepRunners: [
+        'runner/codex.ps1',
+        'runner/fake-real.ps1'
+      ]
+    });
+  } finally {
+    await rm(operatorRoot, { recursive: true, force: true });
+    await rm(targetRoot, { recursive: true, force: true });
   }
 });
 

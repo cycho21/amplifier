@@ -49,6 +49,7 @@ const roadmapCount = document.querySelector('#roadmap-count');
 
 let currentRuns = [];
 let currentExecutionIndex = { runs: [] };
+let currentExecutionOptions = { tasks: [], workflows: [], stepRunners: [] };
 let currentRoadmapDraftExport = null;
 let currentRoadmapFiles = [];
 let currentTargets = [];
@@ -77,14 +78,17 @@ async function loadLocalData() {
     renderTargetRegistry(targetRegistry);
 
     const targetQuery = `?targetId=${encodeURIComponent(currentTargetId)}`;
-    const [logFiles, roadmapFiles, executionIndex] = await Promise.all([
+    const [logFiles, roadmapFiles, executionIndex, executionOptions] = await Promise.all([
       fetchJson(`/api/logs${targetQuery}`),
       fetchJson(`/api/roadmaps${targetQuery}`),
-      fetchJson('/api/executions')
+      fetchJson('/api/executions'),
+      fetchJson(`/api/execution-options${targetQuery}`)
     ]);
 
     currentRoadmapFiles = roadmapFiles;
     currentExecutionIndex = executionIndex;
+    currentExecutionOptions = executionOptions;
+    renderWorkflowExecutionOptions(executionOptions);
     renderLogSummary(summarizeRuns(logFiles));
     renderRoadmapSummary(summarizeRoadmaps(roadmapFiles));
   } catch (error) {
@@ -265,10 +269,63 @@ function readWorkflowExecutionRequest() {
 
 function handleWorkflowExecutionInput(event) {
   if (event.target?.name === 'taskId') {
-    workflowExecutionForm.elements.generatedTaskReady.value = 'false';
+    workflowExecutionForm.elements.generatedTaskReady.value = taskExists(event.target.value) ? 'true' : 'false';
   }
 
   renderWorkflowCommandPreview();
+}
+
+function renderWorkflowExecutionOptions(options) {
+  replaceSelectOptions(
+    workflowExecutionForm.elements.taskId,
+    options.tasks.map((task) => ({
+      value: task.taskId,
+      label: `${task.taskId} (${task.path})`
+    })),
+    workflowExecutionForm.elements.taskId.value || '000_template'
+  );
+  replaceSelectOptions(
+    workflowExecutionForm.elements.workflowSpec,
+    options.workflows.map((filePath) => ({
+      value: filePath,
+      label: filePath
+    })),
+    workflowExecutionForm.elements.workflowSpec.value || 'workflows/implementation-review.yaml'
+  );
+  replaceSelectOptions(
+    workflowExecutionForm.elements.stepRunnerCommand,
+    options.stepRunners.map((filePath) => ({
+      value: filePath,
+      label: filePath
+    })),
+    workflowExecutionForm.elements.stepRunnerCommand.value || 'runner/codex.ps1'
+  );
+  workflowExecutionForm.elements.generatedTaskReady.value = taskExists(workflowExecutionForm.elements.taskId.value)
+    ? 'true'
+    : 'false';
+  renderWorkflowCommandPreview();
+}
+
+function replaceSelectOptions(select, options, selectedValue) {
+  const values = new Set(options.map((option) => option.value));
+  const finalOptions = values.has(selectedValue) || !selectedValue
+    ? options
+    : [{ value: selectedValue, label: `${selectedValue} (missing)` }, ...options];
+
+  select.replaceChildren();
+
+  for (const option of finalOptions) {
+    const element = document.createElement('option');
+    element.value = option.value;
+    element.textContent = option.label;
+    select.append(element);
+  }
+
+  select.value = selectedValue;
+}
+
+function taskExists(taskId) {
+  return currentExecutionOptions.tasks.some((task) => task.taskId === taskId);
 }
 
 function renderWorkflowCommandPreview() {
@@ -830,6 +887,9 @@ function prefillWorkflowExecutionFromRoadmapRun(runResult) {
 }
 
 function fillWorkflowExecutionForm(prefill) {
+  ensureSelectOption(workflowExecutionForm.elements.taskId, prefill.taskId, `${prefill.taskId} (generated)`);
+  ensureSelectOption(workflowExecutionForm.elements.workflowSpec, prefill.workflowSpec, prefill.workflowSpec);
+  ensureSelectOption(workflowExecutionForm.elements.stepRunnerCommand, prefill.stepRunnerCommand, prefill.stepRunnerCommand);
   workflowExecutionForm.elements.taskId.value = prefill.taskId;
   workflowExecutionForm.elements.workflowSpec.value = prefill.workflowSpec;
   workflowExecutionForm.elements.mode.value = prefill.mode;
@@ -839,6 +899,17 @@ function fillWorkflowExecutionForm(prefill) {
   workflowExecutionForm.elements.generatedTaskReady.value = prefill.generatedTaskReady === true ? 'true' : 'false';
   workflowExecutionForm.elements.realExecutionConfirmation.value = '';
   renderWorkflowCommandPreview();
+}
+
+function ensureSelectOption(select, value, label) {
+  if (!value || Array.from(select.options).some((option) => option.value === value)) {
+    return;
+  }
+
+  const option = document.createElement('option');
+  option.value = value;
+  option.textContent = label;
+  select.append(option);
 }
 
 async function openGeneratedTaskDraft(runResult) {
