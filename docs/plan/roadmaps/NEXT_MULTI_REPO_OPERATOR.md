@@ -24,7 +24,7 @@ Not started.
 
 ## Sequence
 
-1. [ ] Add `.operator` local state conventions with tracked
+1. [x] Add `.operator` local state conventions with tracked
    `.operator/targets.example.json` and ignored local state files.
 2. [ ] Add target registry model and tests for target id, name, path, active
    target, and duplicate detection.

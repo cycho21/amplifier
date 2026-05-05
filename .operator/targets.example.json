@@ -1,0 +1,10 @@
+{
+  "activeTargetId": "amplifier",
+  "targets": [
+    {
+      "id": "amplifier",
+      "name": "Mini Amplifier",
+      "path": "I:\\amplifier"
+    }
+  ]
+}
