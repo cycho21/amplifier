@@ -110,19 +110,29 @@ test('runRoadmapItem writes a dry-run log for a selected roadmap item', async ()
       itemIndex: 1
     });
     const written = JSON.parse(await readFile(path.join(repoRoot, result.name), 'utf8'));
+    const task = await readFile(path.join(repoRoot, 'tasks', 'roadmap-NEXT-2.md'), 'utf8');
 
     assert.equal(result.name.startsWith('logs/roadmap-run-'), true);
     assert.equal(written.runner, 'operator-ui-dry-run');
     assert.equal(written.task_id, 'roadmap-NEXT-2');
-    assert.deepEqual(written.input_files, ['docs/plan/roadmaps/NEXT.md']);
+    assert.deepEqual(written.inputs, [
+      'docs/plan/roadmaps/NEXT.md',
+      'tasks/roadmap-NEXT-2.md'
+    ]);
     assert.equal(written.output.summary, 'Dry-run roadmap execution draft created for item 2.');
     assert.deepEqual(written.output.changed_files, []);
     assert.equal(written.output.verification_result, 'not-run');
+    assert.match(written.output.next_steps[0], /runner\\workflow\.ps1/);
+    assert.match(written.output.next_steps[0], /-Mode "dry-run"/);
     assert.deepEqual(written.output.roadmap_item, {
       file: 'docs/plan/roadmaps/NEXT.md',
       number: 2,
-      text: 'Add roadmap run controls.'
+      text: 'Add roadmap run controls.',
+      task_file: 'tasks/roadmap-NEXT-2.md'
     });
+    assert.match(task, /## Task ID\n\n`roadmap-NEXT-2`/);
+    assert.match(task, /## Goal\n\nAdd roadmap run controls\./);
+    assert.match(task, /- `docs\/plan\/roadmaps\/NEXT.md`/);
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
   }
