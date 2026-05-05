@@ -26,7 +26,7 @@ Not started.
 
 1. [x] Add `.operator` local state conventions with tracked
    `.operator/targets.example.json` and ignored local state files.
-2. [ ] Add target registry model and tests for target id, name, path, active
+2. [x] Add target registry model and tests for target id, name, path, active
    target, and duplicate detection.
 3. [ ] Add target validation that reports `ready` or `init required` from
    required target folders and files.
