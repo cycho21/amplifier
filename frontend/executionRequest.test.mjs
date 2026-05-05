@@ -47,6 +47,32 @@ test('createWorkflowExecutionRequest rejects real mode from the Operator UI', ()
   );
 });
 
+test('createWorkflowExecutionRequest blocks real mode when any model opt-in signal is missing', () => {
+  for (const input of [
+    {
+      taskId: 'roadmap-NEXT-6',
+      mode: 'real',
+      realExecutionConfirmation: 'RUN REAL'
+    },
+    {
+      taskId: 'roadmap-NEXT-6',
+      mode: 'real',
+      allowRealExecution: true
+    },
+    {
+      taskId: 'roadmap-NEXT-6',
+      mode: 'real',
+      allowRealExecution: true,
+      realExecutionConfirmation: 'run real'
+    }
+  ]) {
+    assert.throws(
+      () => createWorkflowExecutionRequest(input),
+      /Only dry-run workflow execution/
+    );
+  }
+});
+
 test('createWorkflowExecutionRequest allows real mode only with explicit opt-in', () => {
   const request = createWorkflowExecutionRequest(
     {

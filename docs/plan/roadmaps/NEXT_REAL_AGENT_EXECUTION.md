@@ -33,7 +33,7 @@ In progress.
 5. [x] Record real execution metadata in `.operator/runs.json` and execution
    record logs without changing dry-run log shape.
 6. [x] Add UI states for real running, real failed, and real completed records.
-7. [ ] Add tests proving real mode remains blocked without explicit opt-in at
+7. [x] Add tests proving real mode remains blocked without explicit opt-in at
    model, server, and UI-adjacent layers.
 8. [ ] Dogfood with a controlled fake real runner before allowing Codex real
    invocation from the UI.

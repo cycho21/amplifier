@@ -459,6 +459,47 @@ test('executeWorkflowRequest requires separate server confirmation for real mode
   }
 });
 
+test('executeWorkflowRequest does not invoke real runner when server opt-in is incomplete', async () => {
+  const repoRoot = await mkdtemp(path.join(tmpdir(), 'operator-server-'));
+  let invoked = false;
+
+  try {
+    await mkdir(path.join(repoRoot, 'tasks'), { recursive: true });
+    await mkdir(path.join(repoRoot, 'workflows'), { recursive: true });
+    await mkdir(path.join(repoRoot, 'runner'), { recursive: true });
+    await writeFile(path.join(repoRoot, 'tasks', 'roadmap-NEXT-7.md'), '# Task\n');
+    await writeFile(path.join(repoRoot, 'workflows', 'implementation-review.yaml'), 'workflow: implementation-review\n');
+    await writeFile(path.join(repoRoot, 'runner', 'workflow.ps1'), '# workflow\n');
+    await writeFile(path.join(repoRoot, 'runner', 'codex.ps1'), '# codex\n');
+
+    await assert.rejects(
+      executeWorkflowRequest(
+        repoRoot,
+        {
+          confirmed: true,
+          taskId: 'roadmap-NEXT-7',
+          workflowSpec: 'workflows/implementation-review.yaml',
+          mode: 'real',
+          stepRunnerCommand: 'runner/codex.ps1',
+          allowRealExecution: true,
+          realExecutionConfirmation: 'RUN REAL'
+        },
+        {
+          invoke: async () => {
+            invoked = true;
+            return { stdout: '', stderr: '', exitCode: 0 };
+          }
+        }
+      ),
+      /Real execution server confirmation is required/
+    );
+
+    assert.equal(invoked, false);
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
 test('executeWorkflowRequest records failed dry-run command output', async () => {
   const repoRoot = await mkdtemp(path.join(tmpdir(), 'operator-server-'));
 

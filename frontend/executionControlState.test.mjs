@@ -37,6 +37,41 @@ test('createWorkflowControlState blocks real execution until task, scope, and co
   assert.match(blocked.status, /RUN REAL/);
 });
 
+test('createWorkflowControlState keeps real execution disabled for partial UI opt-in', () => {
+  const cases = [
+    {
+      generatedTaskReady: false,
+      writeScope: ['src'],
+      realExecutionConfirmation: 'RUN REAL',
+      expected: /generated task/
+    },
+    {
+      generatedTaskReady: true,
+      writeScope: [],
+      realExecutionConfirmation: 'RUN REAL',
+      expected: /write scope/
+    },
+    {
+      generatedTaskReady: true,
+      writeScope: ['src'],
+      realExecutionConfirmation: 'RUN_REAL',
+      expected: /RUN REAL/
+    }
+  ];
+
+  for (const input of cases) {
+    const state = createWorkflowControlState({
+      mode: 'real',
+      taskId: 'roadmap-NEXT-7',
+      ...input
+    });
+
+    assert.equal(state.canExecute, false);
+    assert.deepEqual(state.requestPayload, {});
+    assert.match(state.status, input.expected);
+  }
+});
+
 test('createWorkflowControlState enables real execution with explicit UI and server confirmations', () => {
   assert.deepEqual(createWorkflowControlState({
     mode: 'real',
