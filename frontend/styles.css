@@ -547,6 +547,10 @@ textarea {
   background: #ffffff;
 }
 
+.execution-history {
+  padding: 0 20px 20px;
+}
+
 .draft-form {
   display: grid;
   align-content: start;
@@ -624,6 +628,60 @@ textarea {
 .execution-result {
   display: grid;
   gap: 8px;
+}
+
+.execution-request-list {
+  display: grid;
+  gap: 8px;
+}
+
+.execution-request-list.empty {
+  color: var(--muted);
+}
+
+.execution-request-item {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+.execution-request-header,
+.execution-request-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.execution-log-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.artifact-status.warning,
+.execution-log-state.warning,
+.artifact-state.warning {
+  color: var(--warn);
+}
+
+.artifact-state {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #ffd4a8;
+  border-radius: 6px;
+  background: var(--warn-soft);
+}
+
+.artifact-state h3 {
+  margin: 0;
 }
 
 .execution-stream {

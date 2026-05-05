@@ -9,6 +9,11 @@ import {
 } from './roadmapDraft.mjs';
 import { summarizeRoadmaps } from './roadmapParser.mjs';
 import {
+  createRetryPrefillFromExecutionRun,
+  getWorkflowLogReferenceState,
+  summarizeExecutionRequests
+} from './executionRecords.mjs';
+import {
   createWorkflowPrefillFromRoadmapRun,
   getGeneratedTaskFile
 } from './roadmapRunResult.mjs';
@@ -23,6 +28,7 @@ const workflowExecutionForm = document.querySelector('#workflow-execution-form')
 const workflowCommandPreview = document.querySelector('#workflow-command-preview');
 const workflowExecutionStatus = document.querySelector('#workflow-execution-status');
 const workflowExecuteButton = document.querySelector('#workflow-execute');
+const executionRequestList = document.querySelector('#execution-request-list');
 const roadmapReviewModal = document.querySelector('#roadmap-review-modal');
 const roadmapReviewClose = document.querySelector('#roadmap-review-close');
 const roadmapReviewBody = document.querySelector('#roadmap-review-body');
@@ -298,6 +304,7 @@ function renderLogSummary(summary) {
   currentRuns = summary.runs;
   renderSummary(summary);
   renderRunList(summary.runs, summary.emptyMessage);
+  renderExecutionRequestList(summary.runs);
   renderErrors(summary.errors);
 
   if (summary.runs.length > 0) {
@@ -761,6 +768,11 @@ async function runRoadmapItem(fileName, itemIndex, button) {
 
 function prefillWorkflowExecutionFromRoadmapRun(runResult) {
   const prefill = createWorkflowPrefillFromRoadmapRun(runResult);
+  fillWorkflowExecutionForm(prefill);
+  workflowExecutionStatus.textContent = `Ready to dry-run ${prefill.taskId}.`;
+}
+
+function fillWorkflowExecutionForm(prefill) {
   workflowExecutionForm.elements.taskId.value = prefill.taskId;
   workflowExecutionForm.elements.workflowSpec.value = prefill.workflowSpec;
   workflowExecutionForm.elements.mode.value = prefill.mode;
@@ -768,7 +780,6 @@ function prefillWorkflowExecutionFromRoadmapRun(runResult) {
   workflowExecutionForm.elements.logOut.value = prefill.logOut;
   workflowExecutionForm.elements.writeScope.value = prefill.writeScope;
   renderWorkflowCommandPreview();
-  workflowExecutionStatus.textContent = `Ready to dry-run ${prefill.taskId}.`;
 }
 
 async function openGeneratedTaskDraft(runResult) {
@@ -778,11 +789,15 @@ async function openGeneratedTaskDraft(runResult) {
     return;
   }
 
-  const task = await fetchJson(
-    `/api/tasks/read?targetId=${encodeURIComponent(currentTargetId)}&name=${encodeURIComponent(taskFile)}`
-  );
+  try {
+    const task = await fetchJson(
+      `/api/tasks/read?targetId=${encodeURIComponent(currentTargetId)}&name=${encodeURIComponent(taskFile)}`
+    );
 
-  renderTaskDraftViewer(task);
+    renderTaskDraftViewer(task);
+  } catch (error) {
+    renderArtifactState('Generated task missing', taskFile, error.message);
+  }
 }
 
 function renderTaskDraftViewer(task) {
@@ -808,6 +823,101 @@ function renderTaskDraftViewer(task) {
 
   roadmapReviewBody.replaceChildren(header, preview);
   showRoadmapReviewModal();
+}
+
+function renderArtifactState(titleText, fileName, detailText) {
+  const section = document.createElement('section');
+  section.className = 'artifact-state warning';
+  const title = document.createElement('h3');
+  title.textContent = titleText;
+  const file = document.createElement('p');
+  file.className = 'muted compact-line';
+  file.textContent = fileName || 'No file reference captured.';
+  const detail = document.createElement('p');
+  detail.className = 'compact-line';
+  detail.textContent = detailText;
+  section.append(title, file, detail);
+  roadmapReviewBody.replaceChildren(section);
+  showRoadmapReviewModal();
+}
+
+function renderExecutionRequestList(runs) {
+  const requests = summarizeExecutionRequests(runs);
+  executionRequestList.replaceChildren();
+  executionRequestList.classList.toggle('empty', requests.length === 0);
+
+  if (requests.length === 0) {
+    const empty = document.createElement('p');
+    empty.textContent = 'No execution requests loaded.';
+    executionRequestList.append(empty);
+    return;
+  }
+
+  for (const request of requests) {
+    const run = runs.find((item) => item.fileName === request.fileName);
+    const item = document.createElement('article');
+    item.className = 'execution-request-item';
+
+    const header = document.createElement('div');
+    header.className = 'execution-request-header';
+    const title = document.createElement('strong');
+    title.textContent = request.taskId;
+    const badge = document.createElement('span');
+    badge.className = request.exitCode === 0 ? 'verification-badge passed' : 'verification-badge';
+    badge.textContent = request.status;
+    header.append(title, badge);
+
+    const logLine = document.createElement('p');
+    logLine.className = 'muted compact-line';
+    logLine.textContent = `Log: ${request.logPath || 'not captured'}`;
+
+    const command = document.createElement('p');
+    command.className = 'muted compact-line';
+    command.textContent = `Command: ${request.command || 'not captured'}`;
+
+    const actions = document.createElement('div');
+    actions.className = 'execution-request-actions';
+    const logState = getWorkflowLogReferenceState(run, runs);
+    actions.append(renderWorkflowLogAction(logState));
+
+    if (request.exitCode !== 0 && run) {
+      const retryButton = document.createElement('button');
+      retryButton.type = 'button';
+      retryButton.className = 'open-button secondary compact';
+      retryButton.textContent = 'Retry';
+      retryButton.addEventListener('click', () => retryExecutionRequest(run));
+      actions.append(retryButton);
+    }
+
+    item.append(header, logLine, command, actions);
+    executionRequestList.append(item);
+  }
+}
+
+function renderWorkflowLogAction(state) {
+  if (state.status !== 'ready') {
+    const status = document.createElement('span');
+    status.className = 'artifact-status warning';
+    status.textContent = `${state.label}: ${state.logPath || 'None'}`;
+    return status;
+  }
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'open-button secondary compact';
+  button.textContent = state.label;
+  button.addEventListener('click', () => selectRunByFileName(state.workflowFileName));
+  return button;
+}
+
+function retryExecutionRequest(run) {
+  try {
+    const prefill = createRetryPrefillFromExecutionRun(run);
+    fillWorkflowExecutionForm(prefill);
+    workflowExecutionStatus.textContent = `Ready to retry ${prefill.taskId}.`;
+  } catch (error) {
+    workflowExecutionStatus.textContent = error.message;
+  }
 }
 
 function selectRun(index) {
@@ -1022,16 +1132,28 @@ function renderExecutionResult(run) {
 
   const panel = document.createElement('div');
   panel.className = 'execution-result';
+  const workflowLogState = getWorkflowLogReferenceState(run, currentRuns);
   panel.append(
     renderExecutionLine('Command', run.execution.command),
     renderExecutionLine('Log path', run.execution.logPath),
     renderExecutionLine('Exit code', String(run.execution.exitCode ?? 'n/a')),
+    renderExecutionWorkflowLogState(workflowLogState),
     renderExecutionBlock('stdout', run.execution.stdout),
     renderExecutionBlock('stderr', run.execution.stderr)
   );
 
   section.append(heading, panel);
   return section;
+}
+
+function renderExecutionWorkflowLogState(state) {
+  const row = document.createElement('div');
+  row.className = state.status === 'ready' ? 'execution-log-state' : 'execution-log-state warning';
+  const label = document.createElement('span');
+  label.className = 'metric-label';
+  label.textContent = 'Workflow log';
+  row.append(label, renderWorkflowLogAction(state));
+  return row;
 }
 
 function renderExecutionLine(label, value) {

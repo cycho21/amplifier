@@ -9,7 +9,7 @@ manual path copying.
 
 ## Status
 
-In progress.
+Completed.
 
 ## Principles
 
@@ -28,17 +28,17 @@ In progress.
    generated `tasks/roadmap-*.md` file from the UI.
 2. [x] After a Roadmap `Run`, prefill the Workflow Execution panel with the
    generated task id and dry-run defaults.
-3. [ ] Add a direct link from an execution record to the generated workflow log
+3. [x] Add a direct link from an execution record to the generated workflow log
    in the existing Runs inspector.
-4. [ ] Add a recent execution request list that shows task id, command, log
+4. [x] Add a recent execution request list that shows task id, command, log
    output path, exit code, and timestamp.
-5. [ ] Add a retry action for failed dry-run execution records that reuses the
+5. [x] Add a retry action for failed dry-run execution records that reuses the
    captured command fields after confirmation.
-6. [ ] Add UI states for generated task missing, workflow log missing, and
+6. [x] Add UI states for generated task missing, workflow log missing, and
    stale execution record references.
-7. [ ] Add tests that prove the roadmap item, generated task draft, execution
+7. [x] Add tests that prove the roadmap item, generated task draft, execution
    record, and workflow log stay linked.
-8. [ ] Dogfood this roadmap from the web app by running at least one item through
+8. [x] Dogfood this roadmap from the web app by running at least one item through
    the local Roadmaps and Workflow Execution controls.
 
 ## Acceptance Criteria
