@@ -13,7 +13,8 @@ export function summarizeExecutionRequests(runs, indexedRuns = []) {
     }));
   const recordRequests = runs
     .filter((run) => run.execution)
-    .map((run) => summarizeExecutionRecord(run));
+    .map((run) => summarizeExecutionRecord(run))
+    .reverse();
 
   return [
     ...runningRequests,

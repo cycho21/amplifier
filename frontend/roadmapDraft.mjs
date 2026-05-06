@@ -111,7 +111,7 @@ function splitLines(value) {
 
 function createRoadmapDraftFileName(title) {
   const normalizedTitle = normalizeText(title)
-    .replace(/^Next Roadmap:\s*/i, 'Next ')
+    .replace(/^Next Roadmap:\s*/i, '')
     .replace(/^Roadmap:\s*/i, '')
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, '_')

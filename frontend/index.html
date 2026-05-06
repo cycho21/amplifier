@@ -55,15 +55,17 @@
         </div>
       </section>
 
-      <details class="collapsible-section runs-section" open>
+      <details class="collapsible-section runs-section" data-persist-key="runs" open>
         <summary class="collapsible-heading">
           <span>Runs</span>
           <span class="collapse-hint">Toggle</span>
         </summary>
         <section class="workspace">
           <aside class="run-list-panel" aria-label="Workflow logs">
-            <div id="run-list" class="run-list empty">
-              <p>No logs loaded.</p>
+            <div class="run-list-scroll">
+              <div id="run-list" class="run-list empty">
+                <p>No logs loaded.</p>
+              </div>
             </div>
             <div id="error-list" class="error-list" aria-live="polite"></div>
           </aside>
@@ -77,7 +79,7 @@
         </section>
       </details>
 
-      <details class="roadmap-authoring collapsible-section" open>
+      <details class="roadmap-authoring collapsible-section" data-persist-key="roadmap-draft" open>
         <summary class="collapsible-heading">
           <span>Roadmap Draft</span>
           <span class="collapse-hint">Toggle</span>
@@ -120,6 +122,42 @@ Validate before save.</textarea>
         </form>
       </details>
 
+      <dialog id="register-target-modal" class="review-modal" aria-labelledby="register-target-title">
+        <article class="review-dialog">
+          <header class="review-header">
+            <div>
+              <p class="eyebrow">Register Target</p>
+              <h2 id="register-target-title">Add Repository</h2>
+            </div>
+            <button id="register-target-close" class="open-button secondary compact" type="button">Cancel</button>
+          </header>
+          <form id="register-target-form" class="draft-form">
+            <div class="file-browser">
+              <div class="file-browser-nav">
+                <button id="browser-up" class="open-button secondary compact" type="button" disabled>↑ Up</button>
+                <span id="browser-current-path" class="muted compact-line">Loading…</span>
+              </div>
+              <div id="browser-entries" class="browser-entries"></div>
+            </div>
+            <label>
+              <span>Path</span>
+              <input name="path" type="text" placeholder="Select a folder above" required>
+            </label>
+            <label>
+              <span>Name</span>
+              <input name="name" type="text" placeholder="My Repo" required>
+            </label>
+            <label>
+              <span>ID</span>
+              <input name="id" type="text" placeholder="my-repo" required>
+            </label>
+            <div class="draft-actions">
+              <button class="open-button" type="submit">Register</button>
+            </div>
+          </form>
+        </article>
+      </dialog>
+
       <dialog id="roadmap-review-modal" class="review-modal" aria-labelledby="roadmap-review-title">
         <article class="review-dialog">
           <header class="review-header">
@@ -133,7 +171,7 @@ Validate before save.</textarea>
         </article>
       </dialog>
 
-      <details class="execution-control collapsible-section" open>
+      <details class="execution-control collapsible-section" data-persist-key="workflow-execution" open>
         <summary class="collapsible-heading">
           <span>Workflow Execution</span>
           <span class="collapse-hint">Toggle</span>
@@ -173,35 +211,36 @@ Validate before save.</textarea>
             <span>Write Scope</span>
             <input name="writeScope" type="text" value="." placeholder="Repo-relative prefixes, comma separated">
           </label>
-          <label>
-            <span>Real Confirmation</span>
-            <input name="realExecutionConfirmation" type="text" placeholder="RUN REAL">
-          </label>
           <div class="execution-command">
             <span class="metric-label">Command</span>
             <pre id="workflow-command-preview"></pre>
           </div>
-          <p class="blocked-note">Real mode requires a generated task, write scope, and RUN REAL.</p>
           <div class="draft-actions">
             <p id="workflow-execution-status" class="muted compact-line" aria-live="polite">Ready.</p>
             <button id="workflow-execute" class="open-button" type="submit">Run dry-run workflow</button>
           </div>
         </form>
-        <section class="execution-history" aria-label="Recent execution requests">
-          <header class="panel-heading">
-            <h2>Recent Execution Requests</h2>
-          </header>
+        <details class="execution-history collapsible-section" data-persist-key="execution-history" open>
+          <summary class="collapsible-heading">
+            <span>Recent Execution Requests</span>
+            <span class="collapse-hint">Toggle</span>
+          </summary>
           <div id="execution-request-list" class="execution-request-list empty">
             <p>No execution requests loaded.</p>
           </div>
-        </section>
+        </details>
       </details>
 
-      <details class="roadmap-dashboard collapsible-section" open>
+      <details class="roadmap-dashboard collapsible-section" data-persist-key="roadmaps" open>
         <summary class="collapsible-heading">
           <span>Roadmaps</span>
           <span class="collapse-hint">Toggle</span>
         </summary>
+        <div class="roadmap-filter-bar" role="tablist" aria-label="Filter roadmaps by status">
+          <button class="filter-tab active" data-filter="active" role="tab" aria-selected="true" type="button">Active</button>
+          <button class="filter-tab" data-filter="all" role="tab" aria-selected="false" type="button">All</button>
+          <button class="filter-tab" data-filter="completed" role="tab" aria-selected="false" type="button">Completed</button>
+        </div>
         <div id="roadmap-list" class="roadmap-list empty">
           <p>No roadmaps loaded.</p>
         </div>

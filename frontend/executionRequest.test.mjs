@@ -40,48 +40,13 @@ test('formatWorkflowCommand builds the exact local dry-run command', () => {
   );
 });
 
-test('createWorkflowExecutionRequest rejects real mode from the Operator UI', () => {
-  assert.throws(
-    () => createWorkflowExecutionRequest({ taskId: 'roadmap-NEXT-6', mode: 'real' }),
-    /Only dry-run workflow execution/
-  );
-});
-
-test('createWorkflowExecutionRequest blocks real mode when any model opt-in signal is missing', () => {
-  for (const input of [
-    {
-      taskId: 'roadmap-NEXT-6',
-      mode: 'real',
-      realExecutionConfirmation: 'RUN REAL'
-    },
-    {
-      taskId: 'roadmap-NEXT-6',
-      mode: 'real',
-      allowRealExecution: true
-    },
-    {
-      taskId: 'roadmap-NEXT-6',
-      mode: 'real',
-      allowRealExecution: true,
-      realExecutionConfirmation: 'run real'
-    }
-  ]) {
-    assert.throws(
-      () => createWorkflowExecutionRequest(input),
-      /Only dry-run workflow execution/
-    );
-  }
-});
-
-test('createWorkflowExecutionRequest allows real mode only with explicit opt-in', () => {
+test('createWorkflowExecutionRequest allows real mode', () => {
   const request = createWorkflowExecutionRequest(
     {
       taskId: 'roadmap-NEXT-6',
       workflowSpec: 'workflows/implementation-review.yaml',
       mode: 'real',
-      stepRunnerCommand: 'runner/codex.ps1',
-      allowRealExecution: true,
-      realExecutionConfirmation: 'RUN REAL'
+      stepRunnerCommand: 'runner/codex.ps1'
     },
     { timestamp: '2026-05-05T01:02:03.004Z' }
   );
@@ -96,6 +61,7 @@ test('createWorkflowExecutionRequest allows real mode only with explicit opt-in'
     command: '.\\runner\\workflow.ps1 -WorkflowSpec "workflows/implementation-review.yaml" -TaskId "roadmap-NEXT-6" -Mode "real" -StepRunnerCommand ".\\runner\\codex.ps1" -LogOut "logs/operator-workflow-roadmap-NEXT-6-20260505T010203004Z.json" -AllowReal'
   });
 });
+
 
 test('createWorkflowExecutionRequest rejects invalid paths and task ids', () => {
   assert.throws(

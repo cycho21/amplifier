@@ -17,7 +17,7 @@ test('parseRoadmapFile extracts title, status, and sequence progress', () => {
     '2. [ ] Add a read-only roadmap dashboard from `docs/plan/roadmaps/`.'
   ].join('\n');
 
-  const result = parseRoadmapFile('docs/plan/roadmaps/NEXT_OPERATOR_UI.md', content);
+  const result = parseRoadmapFile('docs/plan/roadmaps/OPERATOR_UI.md', content);
 
   assert.equal(result.ok, true);
   assert.equal(result.roadmap.title, 'Next Roadmap: Operator UI');
@@ -39,7 +39,7 @@ test('parseRoadmapFile extracts title, status, and sequence progress', () => {
 test('summarizeRoadmaps separates parsed roadmaps and files without checklists', () => {
   const summary = summarizeRoadmaps([
     {
-      name: 'docs/plan/roadmaps/NEXT_OPERATOR_UI.md',
+      name: 'docs/plan/roadmaps/OPERATOR_UI.md',
       content: '# Next Roadmap: Operator UI\n\n## Status\n\nIn progress.\n\n- [x] One'
     },
     {

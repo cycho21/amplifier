@@ -34,19 +34,23 @@ Read in this order:
 
 1. [Completed Roadmap](roadmaps/COMPLETED.md): completed dry-run kernel and
    explicit non-completed items.
-2. [Real Runners](roadmaps/NEXT_REAL_RUNNERS.md): completed real LLM/tool
+2. [Real Runners](roadmaps/REAL_RUNNERS.md): completed real LLM/tool
    runner invocation roadmap.
-3. [Orchestration](roadmaps/NEXT_ORCHESTRATION.md): completed real dependency
+3. [Orchestration](roadmaps/ORCHESTRATION.md): completed real dependency
    graph, concurrency, failure propagation, and voting gate roadmap.
-4. [Operations](roadmaps/NEXT_OPERATIONS.md): completed real retry, cost, and
+4. [Operations](roadmaps/OPERATIONS.md): completed real retry, cost, and
    memory behavior roadmap.
-5. [Operator UI](roadmaps/NEXT_OPERATOR_UI.md): completed read-only local UI for
+5. [Operator UI](roadmaps/OPERATOR_UI.md): completed read-only local UI for
    workflow log inspection, operational status, roadmap status, and captured
    verification evidence.
-6. [Operator Control](roadmaps/NEXT_OPERATOR_CONTROL.md): completed guarded local
+6. [Operator Control](roadmaps/OPERATOR_CONTROL.md): completed guarded local
    authoring and execution controls for roadmaps and dry-run workflows.
-7. [Real Agent Execution](roadmaps/NEXT_REAL_AGENT_EXECUTION.md): completed
+7. [Real Agent Execution](roadmaps/REAL_AGENT_EXECUTION.md): completed
    guarded real execution controls for explicit, auditable Operator UI runs.
+8. [Roadmap Item Completion Toggle](roadmaps/ROADMAP_ITEM_COMPLETION_TOGGLE.md):
+   in-browser checkbox that writes `[ ]`/`[x]` back to the roadmap file on disk.
+9. [Real Run Smoke Test](roadmaps/REAL_RUN_SMOKE_TEST.md): minimal single-step
+   real agent run to validate the end-to-end runner path.
 
 ## High-Level Progress
 
@@ -57,6 +61,8 @@ Read in this order:
 - [x] Operator UI roadmap.
 - [x] Operator Control roadmap.
 - [x] Real Agent Execution roadmap.
+- [ ] Roadmap Item Completion Toggle roadmap.
+- [ ] Real Run Smoke Test roadmap.
 
 ## Rule For Future Roadmaps
 

@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $executionSpecs = Get-ChildItem -File "execution" -Filter "*.yaml"
 $executionContractPath = "docs/plan/contracts/execution.md"
-$roadmapPath = "docs/plan/roadmaps/NEXT_REAL_RUNNERS.md"
+$roadmapPath = "docs/plan/roadmaps/REAL_RUNNERS.md"
 $progressPath = "docs/plan/roadmaps/REAL_RUNNERS_PROGRESS.md"
 
 if ($executionSpecs.Count -eq 0) {
@@ -41,7 +41,7 @@ foreach ($requiredText in @(
 }
 
 if ($roadmap -notmatch "2\. \[x\] Add provider/tool selection to execution specs without hard-coding role behavior\.") {
-    throw "NEXT_REAL_RUNNERS.md must mark provider/tool selection as complete"
+    throw "REAL_RUNNERS.md must mark provider/tool selection as complete"
 }
 
 if ($progress -notlike "*Provider/Tool Selection*") {

@@ -55,20 +55,66 @@ let currentRoadmapFiles = [];
 let currentTargets = [];
 let currentTargetId = '';
 let editingRoadmapName = null;
+let currentRoadmaps = [];
+let currentRoadmapFilter = 'active';
 
 refreshButton.addEventListener('click', loadLocalData);
 targetSelect.addEventListener('change', () => {
   currentTargetId = targetSelect.value;
+  fetch('/api/targets/active', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ targetId: currentTargetId })
+  }).catch(() => {});
   loadLocalData();
 });
 registerTargetButton.addEventListener('click', registerTargetFolder);
+
+const registerTargetModal = document.querySelector('#register-target-modal');
+const registerTargetClose = document.querySelector('#register-target-close');
+const registerTargetForm = document.querySelector('#register-target-form');
+const browserUp = document.querySelector('#browser-up');
+const browserCurrentPath = document.querySelector('#browser-current-path');
+const browserEntries = document.querySelector('#browser-entries');
+
+registerTargetClose.addEventListener('click', () => registerTargetModal.close());
+browserUp.addEventListener('click', () => navigateBrowser(browserUp.dataset.parent || ''));
+registerTargetForm.addEventListener('submit', handleRegisterTargetSubmit);
+registerTargetForm.elements.name.addEventListener('input', () => {
+  registerTargetForm.elements.id.value = normalizeTargetId(registerTargetForm.elements.name.value);
+});
+
 initTargetButton.addEventListener('click', initializeCurrentTarget);
 roadmapDraftForm.addEventListener('submit', createLocalRoadmapDraft);
 workflowExecutionForm.addEventListener('input', handleWorkflowExecutionInput);
 workflowExecutionForm.addEventListener('submit', executeWorkflow);
 roadmapReviewClose.addEventListener('click', () => roadmapReviewModal.close());
+
+document.querySelectorAll('.filter-tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    currentRoadmapFilter = tab.dataset.filter;
+    document.querySelectorAll('.filter-tab').forEach((t) => {
+      t.classList.toggle('active', t === tab);
+      t.setAttribute('aria-selected', t === tab ? 'true' : 'false');
+    });
+    applyRoadmapFilter();
+  });
+});
+initCollapsiblePersistence();
 renderWorkflowCommandPreview();
 loadLocalData();
+
+function initCollapsiblePersistence() {
+  document.querySelectorAll('[data-persist-key]').forEach((el) => {
+    const key = `collapsible:${el.dataset.persistKey}`;
+    const saved = localStorage.getItem(key);
+    if (saved === 'closed') el.removeAttribute('open');
+    else if (saved === 'open') el.setAttribute('open', '');
+    el.addEventListener('toggle', () => {
+      localStorage.setItem(key, el.open ? 'open' : 'closed');
+    });
+  });
+}
 
 async function loadLocalData() {
   refreshButton.disabled = true;
@@ -134,50 +180,67 @@ function getCurrentTargetContext() {
 }
 
 async function registerTargetFolder() {
-  registerTargetButton.disabled = true;
-  targetStatus.textContent = 'Selecting target folder...';
+  registerTargetForm.reset();
+  registerTargetModal.showModal();
+  await navigateBrowser('');
+}
+
+async function navigateBrowser(dirPath) {
+  browserCurrentPath.textContent = dirPath || 'Drives';
+  browserEntries.replaceChildren();
 
   try {
-    const picked = await fetchJson('/api/targets/pick-folder', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{}'
-    });
-    const fallbackPath = picked.cancelled ? '' : picked.path;
-    const targetPath = window.prompt('Target repository folder path', fallbackPath || '');
+    const result = await fetchJson(`/api/browse?path=${encodeURIComponent(dirPath)}`);
+    browserCurrentPath.textContent = result.path || 'Drives';
+    browserUp.disabled = result.parent === null;
+    browserUp.dataset.parent = result.parent ?? '';
 
-    if (!targetPath) {
-      targetStatus.textContent = 'Target registration cancelled.';
-      return;
+    for (const entry of result.entries) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'browser-entry';
+      btn.textContent = `📁 ${entry.name}`;
+      btn.addEventListener('click', () => selectBrowserEntry(entry));
+      browserEntries.append(btn);
     }
 
-    const proposedName = picked.name || targetPath.split(/[\\/]/).filter(Boolean).pop() || 'Target Repo';
-    const name = window.prompt('Target name', proposedName);
-
-    if (!name) {
-      targetStatus.textContent = 'Target registration cancelled.';
-      return;
+    if (result.entries.length === 0) {
+      const msg = document.createElement('p');
+      msg.className = 'muted compact-line';
+      msg.textContent = 'No subfolders.';
+      browserEntries.append(msg);
     }
+  } catch (error) {
+    browserCurrentPath.textContent = `Error: ${error.message}`;
+  }
+}
 
-    const proposedId = normalizeTargetId(name);
-    const id = window.prompt('Target id', proposedId);
+function selectBrowserEntry(entry) {
+  navigateBrowser(entry.path);
+  registerTargetForm.elements.path.value = entry.path;
+  registerTargetForm.elements.name.value = entry.name;
+  registerTargetForm.elements.id.value = normalizeTargetId(entry.name);
+}
 
-    if (!id) {
-      targetStatus.textContent = 'Target registration cancelled.';
-      return;
-    }
+async function handleRegisterTargetSubmit(event) {
+  event.preventDefault();
+  const formData = new FormData(registerTargetForm);
+  const path = String(formData.get('path') || '').trim();
+  const name = String(formData.get('name') || '').trim();
+  const id = String(formData.get('id') || '').trim();
 
+  try {
     await fetchJson('/api/targets', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id, name, path: targetPath })
+      body: JSON.stringify({ id, name, path })
     });
+    registerTargetModal.close();
     currentTargetId = id;
     await loadLocalData();
   } catch (error) {
     targetStatus.textContent = error.message;
-  } finally {
-    registerTargetButton.disabled = false;
+    registerTargetModal.close();
   }
 }
 
@@ -250,8 +313,7 @@ function readWorkflowExecutionRequest() {
     workflowSpec: String(formData.get('workflowSpec') || ''),
     mode: String(formData.get('mode') || ''),
     stepRunnerCommand: String(formData.get('stepRunnerCommand') || ''),
-    generatedTaskReady: formData.get('generatedTaskReady') === 'true',
-    realExecutionConfirmation: String(formData.get('realExecutionConfirmation') || '')
+    generatedTaskReady: formData.get('generatedTaskReady') === 'true'
   };
   const logOut = String(formData.get('logOut') || '').trim();
   const writeScope = String(formData.get('writeScope') || '').trim();
@@ -270,6 +332,10 @@ function readWorkflowExecutionRequest() {
 function handleWorkflowExecutionInput(event) {
   if (event.target?.name === 'taskId') {
     workflowExecutionForm.elements.generatedTaskReady.value = taskExists(event.target.value) ? 'true' : 'false';
+  }
+
+  if (event.target?.name === 'stepRunnerCommand') {
+    localStorage.setItem('stepRunnerCommand', event.target.value);
   }
 
   renderWorkflowCommandPreview();
@@ -298,7 +364,9 @@ function renderWorkflowExecutionOptions(options) {
       value: filePath,
       label: filePath
     })),
-    workflowExecutionForm.elements.stepRunnerCommand.value || 'runner/codex.ps1'
+    workflowExecutionForm.elements.stepRunnerCommand.value ||
+      localStorage.getItem('stepRunnerCommand') ||
+      'runner/codex.ps1'
   );
   workflowExecutionForm.elements.generatedTaskReady.value = taskExists(workflowExecutionForm.elements.taskId.value)
     ? 'true'
@@ -387,7 +455,7 @@ async function executeWorkflow(event) {
   }
 
   workflowExecuteButton.disabled = true;
-  workflowExecutionStatus.textContent = `Running ${request.mode} workflow...`;
+  workflowExecutionStatus.textContent = `Starting ${request.mode} workflow...`;
 
   try {
     const result = await fetchJson('/api/executions/run', {
@@ -403,14 +471,32 @@ async function executeWorkflow(event) {
         confirmed: true
       })
     });
-    workflowExecutionStatus.textContent = `Execution record written: ${result.name}`;
+    workflowExecutionStatus.textContent = result.pending
+      ? `Running... refresh to see result.`
+      : `Done: ${result.name}`;
     await loadLocalData();
-    selectRunByFileName(result.name);
+    if (result.name) selectRunByFileName(result.name);
+    if (result.pending) startPolling();
   } catch (error) {
     workflowExecutionStatus.textContent = error.message;
   } finally {
     workflowExecuteButton.disabled = false;
   }
+}
+
+let pollingTimer = null;
+
+function startPolling() {
+  if (pollingTimer) return;
+  pollingTimer = setInterval(async () => {
+    await loadLocalData();
+    const stillRunning = (currentExecutionIndex.runs || []).some((r) => r.state === 'real-running');
+    if (!stillRunning) {
+      clearInterval(pollingTimer);
+      pollingTimer = null;
+      workflowExecutionStatus.textContent = 'Execution complete.';
+    }
+  }, 3000);
 }
 
 function renderLogSummary(summary) {
@@ -428,9 +514,19 @@ function renderLogSummary(summary) {
 }
 
 function renderRoadmapSummary(summary) {
+  currentRoadmaps = summary.roadmaps;
   roadmapCount.textContent = String(summary.roadmaps.length);
-  renderRoadmaps(summary.roadmaps, summary.emptyMessage);
+  applyRoadmapFilter();
   renderRoadmapErrors(summary.errors);
+}
+
+function applyRoadmapFilter() {
+  const filtered = currentRoadmaps.filter((roadmap) => {
+    if (currentRoadmapFilter === 'all') return true;
+    const isCompleted = roadmap.status.toLowerCase().startsWith('completed');
+    return currentRoadmapFilter === 'completed' ? isCompleted : !isCompleted;
+  });
+  renderRoadmaps(filtered, currentRoadmaps.length === 0 ? 'No roadmaps loaded.' : 'No roadmaps match this filter.');
 }
 
 function renderLoadFailure(error) {
@@ -464,6 +560,13 @@ function renderSummary(summary) {
   );
 }
 
+const RUN_TYPE_ORDER = ['workflow', 'single', 'operator-control'];
+const RUN_TYPE_LABEL = {
+  'workflow': 'Workflows',
+  'single': 'Single runs',
+  'operator-control': 'Operator executions'
+};
+
 function renderRunList(runs, emptyMessage = 'No logs loaded.') {
   runList.replaceChildren();
   runList.classList.toggle('empty', runs.length === 0);
@@ -475,28 +578,70 @@ function renderRunList(runs, emptyMessage = 'No logs loaded.') {
     return;
   }
 
+  // Group by type, preserve original index for selectRun
+  const groups = new Map();
   runs.forEach((run, index) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'run-item';
-    button.dataset.index = String(index);
-    button.addEventListener('click', () => selectRun(index));
-
-    const title = document.createElement('span');
-    title.className = 'run-title';
-    title.textContent = run.name;
-
-    const meta = document.createElement('span');
-    meta.className = 'run-meta';
-    meta.textContent = `${run.type} / ${run.status}`;
-
-    const file = document.createElement('span');
-    file.className = 'run-file';
-    file.textContent = run.fileName;
-
-    button.append(title, meta, file);
-    runList.append(button);
+    const type = run.type || 'single';
+    if (!groups.has(type)) groups.set(type, []);
+    groups.get(type).push({ run, index });
   });
+
+  const typeOrder = [...RUN_TYPE_ORDER, ...[...groups.keys()].filter(t => !RUN_TYPE_ORDER.includes(t))];
+
+  for (const type of typeOrder) {
+    if (!groups.has(type)) continue;
+    const entries = groups.get(type).slice().reverse(); // newest first
+
+    const groupEl = document.createElement('div');
+    groupEl.className = 'run-group';
+
+    const groupLabel = document.createElement('p');
+    groupLabel.className = 'run-group-label';
+    groupLabel.textContent = RUN_TYPE_LABEL[type] || type;
+    groupEl.append(groupLabel);
+
+    for (const { run, index } of entries) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'run-item';
+      button.dataset.index = String(index);
+      button.addEventListener('click', () => selectRun(index));
+
+      const header = document.createElement('div');
+      header.className = 'run-item-header';
+
+      const title = document.createElement('span');
+      title.className = 'run-title';
+      title.textContent = run.name;
+
+      const badge = document.createElement('span');
+      badge.className = run.status === 'success' || run.status === 'complete'
+        ? 'run-status-badge ok'
+        : run.status === 'failed' || run.status === 'error'
+          ? 'run-status-badge fail'
+          : 'run-status-badge';
+      badge.textContent = run.status;
+
+      header.append(title, badge);
+
+      const meta = document.createElement('div');
+      meta.className = 'run-item-meta';
+
+      const taskSpan = document.createElement('span');
+      taskSpan.className = 'run-file';
+      taskSpan.textContent = run.taskId !== 'unknown' ? run.taskId : run.fileName;
+
+      const timeSpan = document.createElement('span');
+      timeSpan.className = 'run-time';
+      timeSpan.textContent = formatRunTime(run.fileName);
+
+      meta.append(taskSpan, timeSpan);
+      button.append(header, meta);
+      groupEl.append(button);
+    }
+
+    runList.append(groupEl);
+  }
 }
 
 function renderErrors(errors) {
@@ -897,7 +1042,6 @@ function fillWorkflowExecutionForm(prefill) {
   workflowExecutionForm.elements.logOut.value = prefill.logOut;
   workflowExecutionForm.elements.writeScope.value = prefill.writeScope;
   workflowExecutionForm.elements.generatedTaskReady.value = prefill.generatedTaskReady === true ? 'true' : 'false';
-  workflowExecutionForm.elements.realExecutionConfirmation.value = '';
   renderWorkflowCommandPreview();
 }
 
@@ -1068,14 +1212,14 @@ function selectRun(index) {
   inspector.replaceChildren(
     renderRunHeader(run),
     renderStatusGrid(run),
-    renderOperationalState(run),
-    renderCostTracking(run),
-    renderMemoryState(run),
     renderVerificationPanel(run),
-    renderExecutionResult(run),
-    renderTextList('Risks', run.risks),
     renderTextList('Next steps', run.nextSteps),
-    renderSteps(run.steps)
+    renderCollapsible('Steps', renderSteps(run.steps), run.steps.length > 0),
+    renderCollapsible('Execution result', renderExecutionResult(run)),
+    renderCollapsible('Operational state', renderOperationalState(run)),
+    renderCollapsible('Cost tracking', renderCostTracking(run)),
+    renderCollapsible('Memory', renderMemoryState(run)),
+    renderCollapsible('Risks', renderTextList('', run.risks))
   );
 }
 
@@ -1084,6 +1228,11 @@ function selectRunByFileName(fileName) {
 
   if (index >= 0) {
     selectRun(index);
+    const runsSection = document.querySelector('.runs-section');
+    if (runsSection) {
+      runsSection.open = true;
+      inspector.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
 }
 
@@ -1091,6 +1240,17 @@ function clearInspector() {
   inspector.hidden = true;
   inspectorEmpty.hidden = false;
   inspector.replaceChildren();
+}
+
+function renderCollapsible(label, content, open = false) {
+  const details = document.createElement('details');
+  details.className = 'inspector-collapsible';
+  if (open) details.open = true;
+  const summary = document.createElement('summary');
+  summary.className = 'inspector-collapsible-summary';
+  summary.textContent = label;
+  details.append(summary, content);
+  return details;
 }
 
 function renderRunHeader(run) {
@@ -1146,9 +1306,13 @@ function renderMetric(label, value) {
 function renderTextList(title, values) {
   const section = document.createElement('section');
   section.className = 'detail-section';
-  const heading = document.createElement('h3');
-  heading.textContent = title;
   const list = document.createElement('ul');
+
+  if (title) {
+    const heading = document.createElement('h3');
+    heading.textContent = title;
+    section.append(heading);
+  }
 
   const items = values.length > 0 ? values : ['None'];
   for (const value of items) {
@@ -1157,7 +1321,7 @@ function renderTextList(title, values) {
     list.append(item);
   }
 
-  section.append(heading, list);
+  section.append(list);
   return section;
 }
 
@@ -1545,6 +1709,15 @@ function renderSteps(steps) {
 
   section.append(heading, list);
   return section;
+}
+
+function formatRunTime(fileName) {
+  const match = fileName.match(/(\d{8})T(\d{2})(\d{2})(\d{2})/);
+  if (!match) return '';
+  const [, date, h, m, s] = match;
+  const y = date.slice(0, 4), mo = date.slice(4, 6), d = date.slice(6, 8);
+  const dt = new Date(`${y}-${mo}-${d}T${h}:${m}:${s}Z`);
+  return dt.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function formatCost(run) {

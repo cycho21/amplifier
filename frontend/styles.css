@@ -183,7 +183,7 @@ textarea {
 .workspace {
   display: grid;
   grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
-  min-block-size: 560px;
+  block-size: 600px;
 }
 
 .collapsible-section {
@@ -229,6 +229,14 @@ textarea {
   min-inline-size: 0;
   border-inline-end: 1px solid var(--line);
   background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.run-list-scroll {
+  flex: 1;
+  overflow-y: auto;
 }
 
 .panel-heading {
@@ -249,6 +257,49 @@ textarea {
 .empty-state {
   color: var(--muted);
   padding: 24px;
+}
+
+.run-group {
+  display: grid;
+  gap: 4px;
+}
+
+.run-group-label {
+  margin: 0;
+  padding: 6px 4px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.run-item-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.run-status-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--line);
+  color: var(--muted);
+}
+
+.run-status-badge.ok {
+  background: #d1fae5;
+  color: var(--ok);
+}
+
+.run-status-badge.fail {
+  background: var(--warn-soft);
+  color: var(--warn);
 }
 
 .run-item {
@@ -274,6 +325,20 @@ textarea {
 .run-title {
   overflow-wrap: anywhere;
   font-weight: 700;
+  min-width: 0;
+}
+
+.run-item-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.run-time {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--muted);
 }
 
 .run-meta,
@@ -365,6 +430,50 @@ textarea {
 
 .detail-section h3 {
   font-size: 15px;
+}
+
+.inspector-collapsible {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.inspector-collapsible-summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 10px 14px;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inspector-collapsible-summary::before {
+  content: '▶';
+  font-size: 10px;
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+
+.inspector-collapsible[open] > .inspector-collapsible-summary::before {
+  transform: rotate(90deg);
+}
+
+.inspector-collapsible[open] > .inspector-collapsible-summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.inspector-collapsible > :not(summary) {
+  padding: 14px;
+}
+
+.inspector-collapsible .detail-section h3 {
+  display: none;
 }
 
 .state-grid {
@@ -547,7 +656,7 @@ textarea {
   background: #ffffff;
 }
 
-.execution-history {
+.execution-history > :not(summary) {
   padding: 0 20px 20px;
 }
 
@@ -633,6 +742,8 @@ textarea {
 .execution-request-list {
   display: grid;
   gap: 8px;
+  max-block-size: 400px;
+  overflow-y: auto;
 }
 
 .execution-request-list.empty {
@@ -688,6 +799,56 @@ textarea {
   display: grid;
   gap: 4px;
   min-inline-size: 0;
+}
+
+.browse-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.file-browser {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.file-browser-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface-2, #f5f5f5);
+  border-bottom: 1px solid var(--line);
+}
+
+.browser-entries {
+  display: flex;
+  flex-direction: column;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.browser-entry {
+  text-align: left;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.875rem;
+}
+
+.browser-entry:last-child {
+  border-bottom: none;
+}
+
+.browser-entry:hover {
+  background: var(--surface-2, #f0f0f0);
 }
 
 .draft-actions {
@@ -810,6 +971,29 @@ textarea {
   color: var(--ink);
   font: 12px/1.5 Consolas, Monaco, monospace;
   white-space: pre-wrap;
+}
+
+.roadmap-filter-bar {
+  display: flex;
+  gap: 4px;
+  padding: 0 20px 12px;
+}
+
+.filter-tab {
+  padding: 4px 14px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: none;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: var(--text-muted, #888);
+}
+
+.filter-tab.active {
+  background: var(--accent, #0066cc);
+  border-color: var(--accent, #0066cc);
+  color: #fff;
 }
 
 .roadmap-list {

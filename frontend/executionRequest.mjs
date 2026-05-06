@@ -80,19 +80,11 @@ function normalizeMode(value, input) {
     return value;
   }
 
-  if (
-    value === 'real' &&
-    input.allowRealExecution === true &&
-    input.realExecutionConfirmation === 'RUN REAL'
-  ) {
+  if (value === 'real') {
     return value;
   }
 
-  if (value === 'real') {
-    throw new Error('Only dry-run workflow execution is available from the Operator UI.');
-  }
-
-  throw new Error('Only dry-run workflow execution is available from the Operator UI.');
+  throw new Error(`Unknown workflow mode: ${value}`);
 }
 
 function normalizeStepRunnerCommand(value) {

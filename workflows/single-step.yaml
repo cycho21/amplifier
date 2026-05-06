@@ -1,0 +1,36 @@
+workflow: single-step
+
+description: Minimal single-step workflow for smoke testing the real runner path.
+
+mode: parallel
+
+retry:
+  max_attempts: 1
+  retry_on: []
+  backoff: none
+
+cost_tracking:
+  enabled: true
+  currency: USD
+  unit: token-estimate
+
+memory:
+  enabled: false
+
+input:
+  - docs/plan/CONTRACT.md
+  - tasks/{task_id}.md
+
+steps:
+  - id: implementer
+    role: implementer
+    agent_role: agents/implementer.md
+    execution_spec: execution/implementer.yaml
+    task_id: "{task_id}"
+    depends_on: []
+
+output:
+  - workflow_summary
+  - step_logs
+  - final_status
+  - changed_files

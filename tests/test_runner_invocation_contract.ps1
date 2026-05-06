@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $contractIndexPath = "docs/plan/CONTRACT.md"
 $runnerContractPath = "docs/plan/contracts/runner-invocation.md"
-$roadmapPath = "docs/plan/roadmaps/NEXT_REAL_RUNNERS.md"
+$roadmapPath = "docs/plan/roadmaps/REAL_RUNNERS.md"
 
 if (-not (Test-Path $runnerContractPath)) {
     throw "Missing runner invocation contract: $runnerContractPath"
@@ -36,7 +36,7 @@ foreach ($field in @("summary", "changed_files", "verification_result", "risks",
 }
 
 if ($roadmap -notmatch "1\. \[x\] Define real runner invocation contract\.") {
-    throw "NEXT_REAL_RUNNERS.md must mark runner invocation contract as complete"
+    throw "REAL_RUNNERS.md must mark runner invocation contract as complete"
 }
 
 Write-Output "Runner invocation contract test passed."

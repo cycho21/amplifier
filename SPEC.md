@@ -21,7 +21,7 @@ Transform the Mini Amplifier dry-run kernel into a real LLM execution framework 
 - Real parallel execution
 - Cost calculation with actual API usage
 - Persistent memory read/write
-- Error recovery and retry logic (covered in NEXT_OPERATIONS.md)
+- Error recovery and retry logic (covered in OPERATIONS.md)
 
 ---
 
@@ -342,10 +342,10 @@ tests/
 ### What This Spec DOES NOT Include
 
 ❌ Other LLM providers (OpenAI, Gemini, etc.) - future work
-❌ Real parallel execution - covered in NEXT_ORCHESTRATION.md
-❌ Cost calculation with actual API usage - covered in NEXT_OPERATIONS.md
-❌ Persistent memory read/write - covered in NEXT_OPERATIONS.md
-❌ Retry logic and error recovery - covered in NEXT_OPERATIONS.md
+❌ Real parallel execution - covered in ORCHESTRATION.md
+❌ Cost calculation with actual API usage - covered in OPERATIONS.md
+❌ Persistent memory read/write - covered in OPERATIONS.md
+❌ Retry logic and error recovery - covered in OPERATIONS.md
 ❌ Streaming output or progress indicators - nice-to-have
 ❌ Model parameter tuning UI - nice-to-have
 
@@ -389,9 +389,9 @@ tests/
 9. ✅ Authentication validation prevents silent failures
 
 **Out of scope for this spec:**
-- Real parallel execution (NEXT_ORCHESTRATION.md)
-- Cost calculation (NEXT_OPERATIONS.md)
-- Memory persistence (NEXT_OPERATIONS.md)
+- Real parallel execution (ORCHESTRATION.md)
+- Cost calculation (OPERATIONS.md)
+- Memory persistence (OPERATIONS.md)
 
 ---
 

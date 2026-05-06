@@ -26,73 +26,43 @@ function Test-ClaudeCliInstalled {
     }
 }
 
+function Find-ClaudeExe {
+    # Prefer the .exe directly to avoid npm wrapper path issues in PowerShell
+    $npmPrefix = & npm prefix -g 2>$null
+    if ($npmPrefix) {
+        $exePath = Join-Path $npmPrefix "node_modules\@anthropic-ai\claude-code\bin\claude.exe"
+        if (Test-Path $exePath) { return $exePath }
+    }
+    return "claude"
+}
+
 function Invoke-ClaudeCLI {
-    <#
-    .SYNOPSIS
-    Invoke Claude CLI with timeout and stdout parsing
-
-    .PARAMETER PromptFile
-    Path to prompt file
-
-    .PARAMETER Config
-    Provider config hashtable (model, timeout, max_tokens)
-
-    .OUTPUTS
-    Hashtable with response text and metadata
-    #>
     param(
         [string]$PromptFile,
         [hashtable]$Config
     )
 
     $model = if ($Config.ContainsKey("model")) { $Config.model } else { "claude-sonnet-4-5" }
-    $timeout = if ($Config.ContainsKey("timeout")) { $Config.timeout } else { 600 }
-
+    $claudeExe = Find-ClaudeExe
+    $promptText = Get-Content -Encoding utf8 -Raw $PromptFile
     $startTime = Get-Date
 
-    # Invoke Claude CLI with timeout using Start-Job
-    $job = Start-Job -ScriptBlock {
-        param($PromptFile, $Model)
+    $rawOutput = $promptText | & $claudeExe --print --model $model --dangerously-skip-permissions 2>&1 | Out-String
 
-        # Execute Claude CLI
-        # Note: Adjust command based on actual Claude CLI syntax
-        # Assuming: claude --file <promptFile> or similar
-        $output = & claude --file $PromptFile 2>&1 | Out-String
-
-        return $output
-    } -ArgumentList @($PromptFile, $model)
-
-    $result = Wait-Job $job -Timeout $timeout
-
-    if ($null -eq $result) {
-        # Timeout occurred
-        Stop-Job $job
-        Remove-Job $job
-        throw "Claude CLI execution timed out after $timeout seconds"
-    }
-
-    try {
-        $rawOutput = Receive-Job $job -ErrorAction Stop
-    } catch {
-        $errorDetails = $_.Exception.Message
-        throw "Claude CLI error: $errorDetails"
-    } finally {
-        Remove-Job $job
+    if ($LASTEXITCODE -ne 0) {
+        throw "Claude CLI exited with code $LASTEXITCODE. Output: $rawOutput"
     }
 
     $endTime = Get-Date
     $latencyMs = [int](($endTime - $startTime).TotalMilliseconds)
 
-    # Build metadata
-    $metadata = @{
-        model = $model
-        latency_ms = $latencyMs
-        cli_version = "unknown"  # Could parse from `claude --version`
-    }
-
     return @{
         text = $rawOutput
-        metadata = $metadata
+        metadata = @{
+            model = $model
+            latency_ms = $latencyMs
+            cli_version = "unknown"
+        }
     }
 }
 
@@ -187,7 +157,7 @@ Write-Host "[STAGE] Reading complete" -ForegroundColor Green
 $output = Retry-WithStricterPrompt -MaxAttempts 3 -InvokeFunction {
     param($Attempt)
 
-    Write-Output "  Attempt $Attempt/3"
+    Write-Host "  Attempt $Attempt/3"
 
     # Build prompt
     $prompt = Build-Prompt `
@@ -217,7 +187,7 @@ $output = Retry-WithStricterPrompt -MaxAttempts 3 -InvokeFunction {
 
 # Stage 3: Parsing and validating response
 Write-Host "[STAGE] Parsing response" -ForegroundColor Cyan
-Write-Output "  Claude CLI execution successful"
+Write-Host "  Claude CLI execution successful"
 Write-Host "[STAGE] Response validated" -ForegroundColor Green
 
 # Add provider metadata

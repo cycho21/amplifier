@@ -1,0 +1,3 @@
+# Mini Amplifier
+
+Mini Amplifier is an LLM-agnostic agent execution framework that makes agent work reproducible across different runners such as Codex, Claude, API clients, or local LLMs. The framework defines a task → role → spec → runner → log pipeline where each step is runner-neutral, ensuring that the same task executed through different runners maintains the same input contract, expected behavior, and output shape. By organizing behavior into versioned documents rather than embedding it in the LLM, Mini Amplifier enables consistent agent execution with structured log output that can be replayed or compared across runs.

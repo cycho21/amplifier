@@ -1,2 +1,12 @@
 .operator/*
 !.operator/targets.example.json
+
+# Runtime logs — execution records, workflow outputs, prompts, step logs
+logs/execution-record-*.json
+logs/operator-workflow-*.json
+logs/roadmap-run-*.json
+logs/roadmap-workflow-*.json
+logs/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-*.json
+logs/prompts/
+logs/workflow-steps/
+logs/memory/

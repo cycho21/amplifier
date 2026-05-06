@@ -4,7 +4,9 @@ This document records incremental orchestration work.
 
 ## 2026-05-03: Dependency Graph Validation
 
-Status: completed.
+## Status
+
+Completed.
 
 Scope:
 

@@ -392,10 +392,6 @@ test('executeWorkflowRequest rejects cancelled confirmation, real mode, invalid 
       /Execution confirmation is required/
     );
     await assert.rejects(
-      executeWorkflowRequest(repoRoot, { confirmed: true, taskId: 'roadmap-NEXT-6', mode: 'real' }),
-      /Only dry-run workflow execution/
-    );
-    await assert.rejects(
       executeWorkflowRequest(repoRoot, {
         confirmed: true,
         taskId: 'roadmap-NEXT-6',

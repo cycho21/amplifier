@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 $contractIndexPath = "docs/plan/CONTRACT.md"
 $comparisonContractPath = "docs/plan/contracts/comparison.md"
 $votingContractPath = "docs/plan/contracts/voting.md"
-$roadmapPath = "docs/plan/roadmaps/NEXT_ORCHESTRATION.md"
+$roadmapPath = "docs/plan/roadmaps/ORCHESTRATION.md"
 
 if (-not (Test-Path $votingContractPath)) {
     throw "Missing voting contract: $votingContractPath"
@@ -40,7 +40,7 @@ if ($comparisonContract -notlike "*does not choose a winner, score quality, or v
 }
 
 if ($roadmap -notmatch "6\. \[x\] Define result voting separately from structural comparison\.") {
-    throw "NEXT_ORCHESTRATION.md must mark voting definition as complete"
+    throw "ORCHESTRATION.md must mark voting definition as complete"
 }
 
 Write-Output "Workflow voting contract test passed."

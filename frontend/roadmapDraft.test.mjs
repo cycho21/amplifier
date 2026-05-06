@@ -288,7 +288,7 @@ test('createRoadmapDraftExport returns markdown content and a repository-style f
 
   const exported = createRoadmapDraftExport(draft);
 
-  assert.equal(exported.fileName, 'NEXT_OPERATOR_CONTROL.md');
+  assert.equal(exported.fileName, 'OPERATOR_CONTROL.md');
   assert.equal(exported.mimeType, 'text/markdown;charset=utf-8');
   assert.equal(exported.content, formatRoadmapDraftMarkdown(draft));
 });

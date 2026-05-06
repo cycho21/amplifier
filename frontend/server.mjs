@@ -21,11 +21,14 @@ export async function readLogFiles(repoRoot = defaultRepoRoot) {
   return readDirectoryFiles(path.join(repoRoot, 'logs'), 'logs', '.json');
 }
 
+const ROADMAP_INDEX_FILES = new Set(['COMPLETED.md']);
+
 export async function readRoadmapFiles(repoRoot = defaultRepoRoot) {
   return readDirectoryFiles(
     path.join(repoRoot, 'docs', 'plan', 'roadmaps'),
     path.join('docs', 'plan', 'roadmaps'),
-    '.md'
+    '.md',
+    (name) => !ROADMAP_INDEX_FILES.has(name)
   );
 }
 
@@ -150,9 +153,7 @@ export async function executeWorkflowRequest(repoRoot = defaultRepoRoot, input =
     timestamp
   });
 
-  if (request.mode === 'real' && input.realExecutionConfirmed !== true) {
-    throw new Error('Real execution server confirmation is required before invoking a real local runner command.');
-  }
+
 
   request.writeScope = normalizeWriteScope(input.writeScope || ['.']);
   await assertExecutionInputFiles(operatorRoot, targetRoot, request);
@@ -174,67 +175,78 @@ export async function executeWorkflowRequest(repoRoot = defaultRepoRoot, input =
   });
   await writeRunIndex(runIndexPath, runningIndex);
 
-  let result;
+  const recordName = toBrowserPath(path.join('logs', `${recordRunId}.json`));
 
-  try {
-    result = await invoke({ operatorRoot, targetRoot }, request);
-  } catch (error) {
-    result = {
-      stdout: '',
-      stderr: error.message,
-      exitCode: 1
+  const writeRecord = async (result) => {
+    await writeRunIndex(runIndexPath, finishRun(
+      runningIndex,
+      recordRunId,
+      { exitCode: result.exitCode, finishedAt: new Date().toISOString() }
+    ));
+    const executionMessage = formatExecutionRecordMessage(request.mode, result.exitCode);
+    const record = {
+      run_id: recordRunId,
+      runner: 'operator-ui-execution',
+      role: 'operator-control',
+      task_id: request.taskId,
+      inputs: [
+        request.workflowSpec,
+        `tasks/${request.taskId}.md`,
+        'runner/workflow.ps1',
+        request.stepRunnerCommand.replace(/\\/g, '/').replace(/^\.\//, '')
+      ],
+      output: {
+        summary: executionMessage.summary,
+        changed_files: [request.logOut],
+        verification_result: `exit ${result.exitCode}`,
+        risks: executionMessage.risks,
+        next_steps: executionMessage.nextSteps,
+        execution: {
+          command: request.command,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exit_code: result.exitCode,
+          log_path: request.logOut,
+          write_scope: request.writeScope,
+          ...(realExecutionMetadata ? { real_metadata: realExecutionMetadata.log } : {})
+        }
+      }
     };
-  }
+    await mkdir(path.join(targetRoot, 'logs'), { recursive: true });
+    await writeFile(path.join(targetRoot, recordName), `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+  };
 
-  await writeRunIndex(runIndexPath, finishRun(
-    runningIndex,
-    recordRunId,
-    {
-      exitCode: result.exitCode,
-      finishedAt: new Date().toISOString()
-    }
-  ));
-  const recordName = toBrowserPath(path.join(
-    'logs',
-    `${recordRunId}.json`
-  ));
-  const executionMessage = formatExecutionRecordMessage(request.mode, result.exitCode);
-  const record = {
+  // Run in background — write a pending record immediately so the UI can track it
+  const pendingRecord = {
     run_id: recordRunId,
     runner: 'operator-ui-execution',
     role: 'operator-control',
     task_id: request.taskId,
-    inputs: [
-      request.workflowSpec,
-      `tasks/${request.taskId}.md`,
-      'runner/workflow.ps1',
-      request.stepRunnerCommand.replace(/\\/g, '/').replace(/^\.\//, '')
-    ],
+    inputs: [],
     output: {
-      summary: executionMessage.summary,
-      changed_files: [request.logOut],
-      verification_result: `exit ${result.exitCode}`,
-      risks: executionMessage.risks,
-      next_steps: executionMessage.nextSteps,
+      summary: 'Execution in progress...',
+      changed_files: [],
+      verification_result: 'pending',
+      risks: [],
+      next_steps: [],
       execution: {
         command: request.command,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        exit_code: result.exitCode,
+        stdout: '',
+        stderr: '',
+        exit_code: null,
         log_path: request.logOut,
-        write_scope: request.writeScope,
-        ...(realExecutionMetadata ? { real_metadata: realExecutionMetadata.log } : {})
+        write_scope: request.writeScope
       }
     }
   };
-
   await mkdir(path.join(targetRoot, 'logs'), { recursive: true });
-  await writeFile(path.join(targetRoot, recordName), `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+  await writeFile(path.join(targetRoot, recordName), `${JSON.stringify(pendingRecord, null, 2)}\n`, 'utf8');
 
-  return {
-    name: recordName,
-    content: `${JSON.stringify(record, null, 2)}\n`
-  };
+  invoke({ operatorRoot, targetRoot }, request)
+    .then((result) => writeRecord(result))
+    .catch((error) => writeRecord({ stdout: '', stderr: error.message, exitCode: 1 }));
+
+  return { name: recordName, pending: true };
 }
 
 function formatExecutionRecordMessage(mode, exitCode) {
@@ -511,6 +523,20 @@ export function createOperatorServer(options = {}) {
         return;
       }
 
+      if (url.pathname === '/api/targets/active') {
+        if (request.method !== 'PATCH') {
+          response.writeHead(405);
+          response.end('Method not allowed');
+          return;
+        }
+
+        const body = await readJsonRequest(request);
+        const registry = await readTargetRegistry(operatorRoot);
+        const updated = { ...registry, activeTargetId: body.targetId };
+        await sendJson(response, await writeTargetRegistry(operatorRoot, updated));
+        return;
+      }
+
       if (url.pathname === '/api/targets/pick-folder') {
         if (request.method !== 'POST') {
           response.writeHead(405);
@@ -628,6 +654,11 @@ export function createOperatorServer(options = {}) {
         return;
       }
 
+      if (url.pathname === '/api/browse') {
+        await sendJson(response, await browseDirectory(url.searchParams.get('path') || ''));
+        return;
+      }
+
       await sendStatic(response, staticRoot, url.pathname);
     } catch (error) {
       response.writeHead(500, { 'content-type': 'application/json; charset=utf-8' });
@@ -663,6 +694,30 @@ async function resolveTarget(operatorRoot, targetId) {
   return target;
 }
 
+async function browseDirectory(dirPath) {
+  if (!dirPath) {
+    const drives = [];
+    for (const letter of 'CDEFGHIJKLMNOPQRSTUVWXYZ') {
+      try {
+        await stat(`${letter}:\\`);
+        drives.push({ name: `${letter}:`, path: `${letter}:\\` });
+      } catch { }
+    }
+    return { path: '', parent: null, entries: drives };
+  }
+
+  const resolved = path.resolve(dirPath);
+  const parentPath = path.dirname(resolved);
+  const parent = resolved !== parentPath ? parentPath : '';
+  const entries = await readdir(resolved, { withFileTypes: true });
+  const dirs = entries
+    .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+    .map((e) => ({ name: e.name, path: path.join(resolved, e.name) }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+
+  return { path: resolved, parent, entries: dirs };
+}
+
 async function pickTargetFolder(options) {
   if (options.pickFolder) {
     return options.pickFolder();
@@ -679,9 +734,11 @@ function pickWindowsFolder() {
       '-Command',
       [
         'Add-Type -AssemblyName System.Windows.Forms',
+        '$owner = New-Object System.Windows.Forms.Form',
+        '$owner.TopMost = $true',
         '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
         '$dialog.Description = "Select target repository folder"',
-        'if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {',
+        'if ($dialog.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) {',
         '  [pscustomobject]@{ cancelled = $false; path = $dialog.SelectedPath; name = [System.IO.Path]::GetFileName($dialog.SelectedPath) } | ConvertTo-Json -Compress',
         '} else {',
         '  [pscustomobject]@{ cancelled = $true; path = ""; name = "" } | ConvertTo-Json -Compress',
@@ -772,7 +829,7 @@ async function readJsonRequest(request) {
   return JSON.parse(body || '{}');
 }
 
-async function readDirectoryFiles(directory, relativeDirectory, extension) {
+async function readDirectoryFiles(directory, relativeDirectory, extension, nameFilter = () => true) {
   let entries;
 
   try {
@@ -786,7 +843,7 @@ async function readDirectoryFiles(directory, relativeDirectory, extension) {
   }
 
   const files = entries
-    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(extension))
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(extension) && nameFilter(entry.name))
     .map((entry) => entry.name)
     .sort((left, right) => left.localeCompare(right));
 
@@ -875,7 +932,29 @@ function toBrowserPath(filePath) {
   return filePath.split(path.sep).join('/');
 }
 
+async function clearStuckRuns(operatorRoot) {
+  const runIndexPath = path.join(operatorRoot, '.operator', 'runs.json');
+  try {
+    const index = await readRunIndex(runIndexPath);
+    const hadStuck = index.runs.some((r) => r.status === 'running');
+    if (!hadStuck) return;
+    const fixed = {
+      ...index,
+      runs: index.runs.map((r) =>
+        r.status === 'running'
+          ? { ...r, status: 'failed', finishedAt: new Date().toISOString(), exitCode: 1 }
+          : r
+      )
+    };
+    await writeRunIndex(runIndexPath, fixed);
+    console.log('Cleared stuck running tasks from previous session.');
+  } catch {
+    // no runs.json yet — nothing to clear
+  }
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  await clearStuckRuns(defaultRepoRoot);
   const server = createOperatorServer();
   server.listen(defaultPort, '127.0.0.1', () => {
     console.log(`Operator UI: http://127.0.0.1:${defaultPort}/`);
