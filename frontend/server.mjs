@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { watch } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -6,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 import { createWorkflowExecutionRequest } from './executionRequest.mjs';
 import { parseRoadmapFile } from './roadmapParser.mjs';
-import { createRunIndex, finishRun, startRun } from './runIndex.mjs';
+import { cancelRun, createRunIndex, finishRun, startRun } from './runIndex.mjs';
 import { createTargetRegistry, findActiveTarget, normalizeTargetId, registerTarget } from './targetRegistry.mjs';
 import { createTargetInitPlan, initializeTarget } from './targetInit.mjs';
 import { validateTargetStructure } from './targetValidation.mjs';
@@ -18,7 +19,20 @@ const defaultPort = Number.parseInt(process.env.PORT || '4173', 10);
 const defaultTemplateRoot = path.join(defaultRepoRoot, 'templates', 'target-init');
 
 export async function readLogFiles(repoRoot = defaultRepoRoot) {
-  return readDirectoryFiles(path.join(repoRoot, 'logs'), 'logs', '.json');
+  return readDirectoryFiles(
+    path.join(repoRoot, 'logs'),
+    'logs',
+    '.json',
+    (name) => {
+      if (name.startsWith('roadmap-run-')) return false;
+      if (name.startsWith('execution-record-roadmap-')) return false;
+      // Filter out test files
+      if (name === 'test-dry-run.json') return false;
+      // Filter out test tasks
+      if (name.includes('-000_template') || name.includes('-001_smoke_test')) return false;
+      return true;
+    }
+  );
 }
 
 const ROADMAP_INDEX_FILES = new Set(['COMPLETED.md']);
@@ -43,6 +57,26 @@ export async function readTaskDraft(repoRoot = defaultRepoRoot, fileName) {
 
 export async function readExecutionRunIndex(operatorRoot = defaultRepoRoot) {
   return readRunIndex(path.join(operatorRoot, '.operator', 'runs.json'));
+}
+
+export async function readExecutionStepLogs(repoRoot = defaultRepoRoot, runId) {
+  const stepDir = path.join(repoRoot, 'logs', 'workflow-steps', runId);
+  let entries;
+  try {
+    entries = await readdir(stepDir);
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+  const results = [];
+  for (const name of entries) {
+    if (!name.endsWith('.json') || name.endsWith('.retry-attempts.json')) continue;
+    try {
+      const content = await readFile(path.join(stepDir, name), 'utf8');
+      results.push(JSON.parse(content.replace(/^﻿/, '')));
+    } catch { /* skip malformed */ }
+  }
+  return results;
 }
 
 export async function readExecutionOptions(operatorRoot = defaultRepoRoot, targetRoot = operatorRoot) {
@@ -70,6 +104,52 @@ export async function saveRoadmapFile(repoRoot = defaultRepoRoot, fileName, cont
   return {
     name: toBrowserPath(relativeName),
     content
+  };
+}
+
+export async function toggleRoadmapItem(repoRoot = defaultRepoRoot, request = {}) {
+  const relativeName = normalizeRoadmapFileName(request.name);
+  const filePath = path.join(repoRoot, relativeName);
+  const content = await readFile(filePath, 'utf8');
+  const lines = content.split(/\r?\n/);
+
+  const itemIndex = Number(request.itemIndex);
+
+  if (!Number.isInteger(itemIndex) || itemIndex < 0) {
+    throw new Error('Item index must be a non-negative integer.');
+  }
+
+  let checkboxCount = 0;
+  let targetLineIndex = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(/^\s*(?:[-*]|\d+\.)\s+\[(x|X| )\]\s+(.+)$/);
+    if (match) {
+      if (checkboxCount === itemIndex) {
+        targetLineIndex = i;
+        break;
+      }
+      checkboxCount++;
+    }
+  }
+
+  if (targetLineIndex === -1) {
+    throw new Error('Roadmap item index is out of range.');
+  }
+
+  const line = lines[targetLineIndex];
+  const flipped = line.replace(/\[(x|X| )\]/, (match, check) => {
+    return check.toLowerCase() === 'x' ? '[ ]' : '[x]';
+  });
+
+  lines[targetLineIndex] = flipped;
+  const newContent = lines.join('\n');
+
+  await writeFile(filePath, newContent, 'utf8');
+
+  return {
+    name: toBrowserPath(relativeName),
+    content: newContent
   };
 }
 
@@ -153,13 +233,12 @@ export async function executeWorkflowRequest(repoRoot = defaultRepoRoot, input =
     timestamp
   });
 
-
-
-  request.writeScope = normalizeWriteScope(input.writeScope || ['.']);
+request.writeScope = normalizeWriteScope(input.writeScope || ['.']);
   await assertExecutionInputFiles(operatorRoot, targetRoot, request);
 
   const invoke = options.invoke || invokeWorkflowCommand;
   const recordRunId = `execution-record-${request.taskId}-${timestamp.replace(/[-:.]/g, '')}`;
+  request.runId = recordRunId;
   const targetId = input.targetId || 'default';
   const realExecutionMetadata = createRealExecutionMetadata(request, targetId);
   const runIndexPath = options.runIndexPath || path.join(operatorRoot, '.operator', 'runs.json');
@@ -178,8 +257,15 @@ export async function executeWorkflowRequest(repoRoot = defaultRepoRoot, input =
   const recordName = toBrowserPath(path.join('logs', `${recordRunId}.json`));
 
   const writeRecord = async (result) => {
+    const currentIndex = await readRunIndex(runIndexPath);
+    const stillTracked = currentIndex.runs.some((r) => r.runId === recordRunId);
+
+    if (!stillTracked) {
+      return; // cancelled — do not overwrite
+    }
+
     await writeRunIndex(runIndexPath, finishRun(
-      runningIndex,
+      currentIndex,
       recordRunId,
       { exitCode: result.exitCode, finishedAt: new Date().toISOString() }
     ));
@@ -235,18 +321,24 @@ export async function executeWorkflowRequest(repoRoot = defaultRepoRoot, input =
         stderr: '',
         exit_code: null,
         log_path: request.logOut,
-        write_scope: request.writeScope
+        write_scope: request.writeScope,
+        ...(realExecutionMetadata ? { real_metadata: realExecutionMetadata.log } : {})
       }
     }
   };
   await mkdir(path.join(targetRoot, 'logs'), { recursive: true });
   await writeFile(path.join(targetRoot, recordName), `${JSON.stringify(pendingRecord, null, 2)}\n`, 'utf8');
 
-  invoke({ operatorRoot, targetRoot }, request)
+  const clients = options.reloadClients;
+  const onChunk = clients
+    ? (chunk) => broadcast(clients, 'stdout-chunk', { runId: recordRunId, chunk })
+    : undefined;
+
+  const _done = invoke({ operatorRoot, targetRoot }, request, { onChunk })
     .then((result) => writeRecord(result))
     .catch((error) => writeRecord({ stdout: '', stderr: error.message, exitCode: 1 }));
 
-  return { name: recordName, pending: true };
+  return { name: recordName, taskId: request.taskId, pending: true, _done };
 }
 
 function formatExecutionRecordMessage(mode, exitCode) {
@@ -319,7 +411,7 @@ async function assertExecutionInputFiles(operatorRoot, targetRoot, request) {
   }
 }
 
-function invokeWorkflowCommand(roots, request) {
+function invokeWorkflowCommand(roots, request, { onChunk } = {}) {
   const stepRunnerCommand = resolveOperatorRunnerPath(roots.operatorRoot, request.stepRunnerCommand);
   const args = [
     '-NoProfile',
@@ -343,6 +435,10 @@ function invokeWorkflowCommand(roots, request) {
     roots.targetRoot
   ];
 
+  if (request.runId) {
+    args.push('-RunId', request.runId);
+  }
+
   if (request.allowReal === true) {
     args.push('-AllowReal');
   }
@@ -357,7 +453,9 @@ function invokeWorkflowCommand(roots, request) {
     let stderr = '';
 
     child.stdout.on('data', (chunk) => {
-      stdout += chunk;
+      const text = chunk.toString();
+      stdout += text;
+      if (onChunk) onChunk(text);
     });
     child.stderr.on('data', (chunk) => {
       stderr += chunk;
@@ -495,10 +593,23 @@ export function createOperatorServer(options = {}) {
   const operatorRoot = options.operatorRoot || options.repoRoot || defaultRepoRoot;
   const staticRoot = options.staticRoot || frontendDir;
   const templateRoot = options.templateRoot || defaultTemplateRoot;
+  const reloadClients = options.reloadClients || new Set();
 
   return createServer(async (request, response) => {
     try {
       const url = new URL(request.url || '/', 'http://127.0.0.1');
+
+      if (url.pathname === '/api/watch') {
+        response.writeHead(200, {
+          'content-type': 'text/event-stream',
+          'cache-control': 'no-cache',
+          'connection': 'keep-alive'
+        });
+        response.write('data: connected\n\n');
+        reloadClients.add(response);
+        request.on('close', () => reloadClients.delete(response));
+        return;
+      }
 
       if (url.pathname === '/api/targets') {
         if (request.method === 'GET') {
@@ -605,6 +716,19 @@ export function createOperatorServer(options = {}) {
         return;
       }
 
+      if (url.pathname === '/api/roadmaps/toggle') {
+        if (request.method !== 'PATCH') {
+          response.writeHead(405);
+          response.end('Method not allowed');
+          return;
+        }
+
+        const body = await readJsonRequest(request);
+        const target = await resolveTarget(operatorRoot, body.targetId);
+        await sendJson(response, await toggleRoadmapItem(target.path, body));
+        return;
+      }
+
       if (url.pathname === '/api/roadmaps/run') {
         if (request.method !== 'POST') {
           response.writeHead(405);
@@ -627,7 +751,7 @@ export function createOperatorServer(options = {}) {
 
         const body = await readJsonRequest(request);
         const target = await resolveTarget(operatorRoot, body.targetId);
-        await sendJson(response, await executeWorkflowRequest(target.path, body, { operatorRoot }));
+        await sendJson(response, await executeWorkflowRequest(target.path, body, { operatorRoot, reloadClients }));
         return;
       }
 
@@ -639,6 +763,61 @@ export function createOperatorServer(options = {}) {
         }
 
         await sendJson(response, await readExecutionRunIndex(operatorRoot));
+        return;
+      }
+
+      if (url.pathname.startsWith('/api/executions/') && url.pathname !== '/api/executions/run') {
+        const runId = decodeURIComponent(url.pathname.slice('/api/executions/'.length));
+
+        if (url.pathname.endsWith('/steps')) {
+          if (request.method !== 'GET') {
+            response.writeHead(405);
+            response.end('Method not allowed');
+            return;
+          }
+          const bareRunId = runId.replace(/\/steps$/, '');
+          const runIndexPath = path.join(operatorRoot, '.operator', 'runs.json');
+          const index = await readRunIndex(runIndexPath);
+          const run = index.runs.find((r) => r.runId === bareRunId);
+          const targetPath = run
+            ? (await resolveTarget(operatorRoot, run.targetId)).path
+            : operatorRoot;
+          await sendJson(response, await readExecutionStepLogs(targetPath, bareRunId));
+          return;
+        }
+
+        if (request.method !== 'DELETE') {
+          response.writeHead(405);
+          response.end('Method not allowed');
+          return;
+        }
+
+        const runIndexPath = path.join(operatorRoot, '.operator', 'runs.json');
+        const index = await readRunIndex(runIndexPath);
+        const run = index.runs.find((r) => r.runId === runId);
+
+        if (!run) {
+          response.writeHead(404);
+          response.end('Run not found');
+          return;
+        }
+
+        await writeRunIndex(runIndexPath, cancelRun(index, runId));
+
+        const target = await resolveTarget(operatorRoot, run.targetId);
+        const recordFile = path.join(target.path, 'logs', `${runId}.json`);
+
+        try {
+          const existing = JSON.parse(await readFile(recordFile, 'utf8'));
+          existing.output.verification_result = 'cancelled';
+          existing.output.summary = 'Execution cancelled by user.';
+          existing.output.execution.exit_code = 1;
+          await writeFile(recordFile, `${JSON.stringify(existing, null, 2)}\n`, 'utf8');
+        } catch {
+          // file may not exist yet — ignore
+        }
+
+        await sendJson(response, { ok: true });
         return;
       }
 
@@ -953,9 +1132,85 @@ async function clearStuckRuns(operatorRoot) {
   }
 }
 
+function broadcast(clients, event, data) {
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const res of clients) {
+    try { res.write(payload); } catch {}
+  }
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   await clearStuckRuns(defaultRepoRoot);
-  const server = createOperatorServer();
+  const reloadClients = new Set();
+  const server = createOperatorServer({ reloadClients });
+
+  // Watch frontend files → reload
+  let reloadTimeout = null;
+  watch(frontendDir, { recursive: false }, (_, filename) => {
+    if (!filename || filename.endsWith('.json')) return;
+    clearTimeout(reloadTimeout);
+    reloadTimeout = setTimeout(() => broadcast(reloadClients, 'reload', {}), 300);
+  });
+
+  // Watch runs.json → workflow completion
+  const runsJsonPath = path.join(defaultRepoRoot, '.operator', 'runs.json');
+  watch(runsJsonPath, async () => {
+    broadcast(reloadClients, 'workflow-update', { timestamp: Date.now() });
+  });
+
+  // Watch workflow-steps dir → step events
+  const stepsDir = path.join(defaultRepoRoot, 'logs', 'workflow-steps');
+  await mkdir(stepsDir, { recursive: true });
+  watch(stepsDir, { recursive: true }, async (_, filename) => {
+    if (!filename) return;
+
+    // Recursive watch on Windows returns "runId\file.json" — normalise to forward slashes
+    const normalizedFilename = filename.replace(/\\/g, '/');
+    const parts = normalizedFilename.split('/');
+    const bareFilename = parts[parts.length - 1];
+    const watchedRunId = parts.length > 1 ? parts[0] : null;
+
+    // Step started: .attempts file updated
+    if (bareFilename.endsWith('.json.attempts')) {
+      const jsonFilename = bareFilename.replace(/\.attempts$/, '');
+      const base = jsonFilename.replace(/\.json$/, '');
+      // Parse: implementation-review-architect-roadmap-TASK-1.json
+      // Format: {workflow}-{stepId}-{taskId}.json
+      const match = base.match(/^(.+?)-([^-]+)-(.+)$/);
+      if (match) {
+        const [, , stepId, taskId] = match;
+        broadcast(reloadClients, 'step', {
+          taskId,
+          stepId,
+          status: 'in-progress',
+          summary: '',
+          fileName: jsonFilename,
+          runId: watchedRunId
+        });
+      }
+      return;
+    }
+
+    // Step completed: .json file created (ignore runner-internal files)
+    if (bareFilename.endsWith('.json') && !bareFilename.endsWith('.retry-attempts.json')) {
+      try {
+        const stepFilePath = watchedRunId
+          ? path.join(stepsDir, watchedRunId, bareFilename)
+          : path.join(stepsDir, bareFilename);
+        const content = await readFile(stepFilePath, 'utf8');
+        const data = JSON.parse(content.replace(/^﻿/, ''));
+        broadcast(reloadClients, 'step', {
+          taskId: data.task_id,
+          stepId: data.role,
+          status: 'completed',
+          summary: data.output?.summary || '',
+          fileName: bareFilename,
+          runId: watchedRunId
+        });
+      } catch {}
+    }
+  });
+
   server.listen(defaultPort, '127.0.0.1', () => {
     console.log(`Operator UI: http://127.0.0.1:${defaultPort}/`);
   });

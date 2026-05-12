@@ -25,11 +25,11 @@ Allow operators to toggle roadmap items as complete or incomplete directly from 
 
 ## Acceptance Criteria
 
-- Clicking a checkbox in the Roadmap section sends a PATCH request and the corresponding `[ ]` / `[x]` line in the `.md` file is updated.
-- Toggling back unchecks the file entry.
-- The UI reflects the toggled state immediately without a full page refresh.
-- If the write fails, the checkbox reverts and an error message appears inline.
-- Roadmap filter tabs (Active / Completed) correctly re-evaluate after a toggle.
+- [x] `PATCH /api/roadmaps/toggle` endpoint reads the file, flips the checkbox line, and overwrites.
+- [ ] Each roadmap item renders a checkbox reflecting `item.done`.
+- [ ] Toggling sends the PATCH and updates in-memory state without a full reload.
+- [ ] On failure, the checkbox reverts and an inline error appears.
+- [ ] Roadmap filter tabs correctly re-evaluate after a toggle.
 
 ## Out Of Scope
 

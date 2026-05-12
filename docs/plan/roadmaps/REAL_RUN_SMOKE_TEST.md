@@ -2,7 +2,7 @@
 
 ## Status
 
-Not started.
+Completed.
 
 ## Goal
 
@@ -27,10 +27,10 @@ this environment.
 
 ## Acceptance Criteria
 
-- [ ] Dry-run completes and produces a log file without errors.
-- [ ] Real run completes and produces a log file with `status: success`.
-- [ ] `docs/plan/SUMMARY.md` is created and contains a readable project summary.
-- [ ] Log file includes `runner`, `cost`, and `changed_files` fields.
+- [x] Dry-run completes and produces a log file without errors.
+- [x] Real run completes and produces a log file with `status: success`.
+- [x] `docs/plan/SUMMARY.md` is created and contains a readable project summary.
+- [x] Log file includes `runner`, `cost`, and `changed_files` fields.
 
 ## Out Of Scope
 

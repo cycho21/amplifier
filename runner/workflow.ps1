@@ -7,10 +7,34 @@ param(
     [string]$StepRunnerCommand = ".\runner\codex.ps1",
     [string]$StepLogDir = "logs/workflow-steps",
     [string]$OperatorRoot = "",
-    [string]$TargetRoot = ""
+    [string]$TargetRoot = "",
+    [string]$RunId = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+# Write-FileRetry: atomic-safe file write for Windows.
+# Set-Content uses FileShare.Read which causes sharing violations when Windows
+# Defender, Node.js watchers, or concurrent processes have the file open.
+# [System.IO.File]::WriteAllText uses a compatible sharing mode, and retry +
+# exponential backoff handles any remaining transient locks (Defender, AV, etc.).
+function Write-FileRetry {
+    param(
+        [string]$Path,
+        [string]$Content,
+        [int]$MaxRetries = 5
+    )
+    $enc = [System.Text.UTF8Encoding]::new($false)  # UTF-8 without BOM
+    for ($i = 0; $i -lt $MaxRetries; $i++) {
+        try {
+            [System.IO.File]::WriteAllText($Path, $Content, $enc)
+            return
+        } catch [System.IO.IOException] {
+            if ($i -ge $MaxRetries - 1) { throw }
+            Start-Sleep -Milliseconds ([Math]::Pow(2, $i) * 50)  # 50, 100, 200, 400 ms
+        }
+    }
+}
 
 if ([string]::IsNullOrWhiteSpace($OperatorRoot)) {
     $OperatorRoot = (Get-Location).Path
@@ -419,21 +443,36 @@ function Read-RetryAttemptLog {
         return @()
     }
 
-    $attemptText = Get-Content -Encoding utf8 $Path -Raw
+    $maxRetries = 10
+    $retryDelayMs = 200
 
-    if ([string]::IsNullOrWhiteSpace($attemptText)) {
-        return @()
+    for ($i = 0; $i -lt $maxRetries; $i++) {
+        try {
+            Start-Sleep -Milliseconds ($retryDelayMs * $i)
+            $attemptText = Get-Content -Encoding utf8 $Path -Raw -ErrorAction Stop
+
+            if ([string]::IsNullOrWhiteSpace($attemptText)) {
+                return @()
+            }
+
+            return @($attemptText | ConvertFrom-Json -ErrorAction Stop | ForEach-Object {
+                [ordered]@{
+                    step_id = [string]$_.step_id
+                    role = [string]$_.role
+                    attempt = [int]$_.attempt
+                    status = [string]$_.status
+                    reason = [string]$_.reason
+                }
+            })
+        } catch {
+            if ($i -eq ($maxRetries - 1)) {
+                Write-Warning "Failed to read retry attempt log '$Path' after $maxRetries attempts: $_"
+                return @()
+            }
+        }
     }
 
-    return @($attemptText | ConvertFrom-Json | ForEach-Object {
-        [ordered]@{
-            step_id = [string]$_.step_id
-            role = [string]$_.role
-            attempt = [int]$_.attempt
-            status = [string]$_.status
-            reason = [string]$_.reason
-        }
-    })
+    return @()
 }
 
 function New-WorkflowRetryAttempts {
@@ -756,6 +795,20 @@ function Invoke-RealStepRunnerJob {
             $MaxAttempts = 1
         }
 
+        function Write-FileRetry {
+            param([string]$Path, [string]$Content, [int]$MaxRetries = 5)
+            $enc = [System.Text.UTF8Encoding]::new($false)
+            for ($i = 0; $i -lt $MaxRetries; $i++) {
+                try {
+                    [System.IO.File]::WriteAllText($Path, $Content, $enc)
+                    return
+                } catch [System.IO.IOException] {
+                    if ($i -ge $MaxRetries - 1) { throw }
+                    Start-Sleep -Milliseconds ([Math]::Pow(2, $i) * 50)
+                }
+            }
+        }
+
         $retryRunnerErrors = @($RetryOn) -contains "runner-error"
         $lastError = ""
         $attemptRecords = @()
@@ -763,11 +816,16 @@ function Invoke-RealStepRunnerJob {
         function Write-AttemptRecords {
             param($Records, [string]$Path)
 
-            ConvertTo-Json -InputObject @($Records) -Depth 6 | Set-Content -Encoding utf8 -Path $Path
+            try {
+                $json = ConvertTo-Json -InputObject @($Records) -Depth 6
+                Write-FileRetry -Path $Path -Content $json
+            } catch {
+                Write-Warning "Failed to write retry attempt records to '$Path': $_"
+            }
         }
 
         for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-            Set-Content -Encoding utf8 -Path $AttemptOut -Value $attempt
+            Write-FileRetry -Path $AttemptOut -Content "$attempt"
 
             try {
                 & $Command `
@@ -792,6 +850,7 @@ function Invoke-RealStepRunnerJob {
                     reason = ""
                 }
                 Write-AttemptRecords $attemptRecords $RetryAttemptsOut
+                Start-Sleep -Milliseconds 300
                 return
             } catch {
                 $lastError = $_.Exception.Message
@@ -805,6 +864,7 @@ function Invoke-RealStepRunnerJob {
                 Write-AttemptRecords $attemptRecords $RetryAttemptsOut
 
                 if (-not $retryRunnerErrors -or $attempt -ge $MaxAttempts) {
+                    Start-Sleep -Milliseconds 300
                     throw $lastError
                 }
             }
@@ -891,6 +951,8 @@ function Invoke-ParallelRealRun {
                     $receiveError = $_.Exception.Message
                 }
 
+                Start-Sleep -Milliseconds 500
+
                 if ($job.State -ne "Completed" -or -not [string]::IsNullOrWhiteSpace($receiveError)) {
                     $failedStep = $stepById[$job.StepId]
                     $failure = [ordered]@{
@@ -929,12 +991,21 @@ function Invoke-ParallelRealRun {
                 }
             })
 
+            Start-Sleep -Milliseconds 300
+
             foreach ($job in $jobs) {
                 $jobRetryAttempts = Read-RetryAttemptLog $job.StepRetryAttemptsOut
                 $retryAttempts += $jobRetryAttempts
 
                 if ($job.StepId -eq $failure.step_id) {
-                    $failure.attempts = @($jobRetryAttempts).Count
+                    $attemptCount = @($jobRetryAttempts).Count
+                    if ($attemptCount -eq 0 -and (Test-Path $job.StepAttemptOut)) {
+                        $attemptCount = [int](Get-Content -Encoding utf8 $job.StepAttemptOut -Raw)
+                    }
+                    if ($attemptCount -eq 0) {
+                        $attemptCount = 1
+                    }
+                    $failure.attempts = $attemptCount
                     $failure.retry_exhausted = (
                         @($RetryPolicy.retry_on) -contains "runner-error" -and
                         $failure.attempts -ge $RetryPolicy.max_attempts
@@ -966,6 +1037,8 @@ function Invoke-ParallelRealRun {
             }
         }
 
+        Start-Sleep -Milliseconds 300
+
         foreach ($step in $ready) {
             $job = @($jobs | Where-Object { $_.StepId -eq $step.id })[0]
             $parsedStepLog = Get-Content -Encoding utf8 $job.StepLogOut -Raw | ConvertFrom-Json
@@ -979,7 +1052,12 @@ function Invoke-ParallelRealRun {
             $parsedStepLog | Add-Member -NotePropertyName retry_policy -NotePropertyValue $RetryPolicy -Force
             $parsedStepLog | Add-Member -NotePropertyName attempts -NotePropertyValue $attempts -Force
             $parsedStepLog | Add-Member -NotePropertyName retry_attempts -NotePropertyValue $retryAttempts -Force
-            $parsedStepLog | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 -Path $job.StepLogOut
+            try {
+                $enrichedJson = $parsedStepLog | ConvertTo-Json -Depth 8
+                Write-FileRetry -Path $job.StepLogOut -Content $enrichedJson
+            } catch {
+                Write-Warning "Failed to enrich step log '$($job.StepLogOut)': $_"
+            }
 
             $stepLogs += New-RealStepLog $step $parsedStepLog $job.StepLogOut $attempts $retryAttempts $RetryPolicy $CostTrackingPolicy $MemoryPolicy
             $completed[$step.id] = $true
@@ -1118,7 +1196,7 @@ function Invoke-RealWorkflowMemory {
         step_ids = @($StepLogs | ForEach-Object { $_.step_id })
     }
 
-    $memoryPayload | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 -Path $MemoryPolicy.path
+    Write-FileRetry -Path $MemoryPolicy.path -Content ($memoryPayload | ConvertTo-Json -Depth 6)
 
     $memoryState.loaded = $loaded
     $memoryState.written = $true
@@ -1251,12 +1329,18 @@ if ($Mode -eq "real" -and $workflowMode -ne "parallel") {
     throw "Real workflow execution currently supports parallel workflows only"
 }
 
+$effectiveStepLogDir = if (-not [string]::IsNullOrWhiteSpace($RunId)) {
+    Join-Path $StepLogDir $RunId
+} else {
+    $StepLogDir
+}
+
 if ($Mode -eq "dry-run" -and $workflowMode -eq "sequential") {
     $output = Invoke-SequentialDryRun $steps $retryPolicy $costTrackingPolicy $memoryPolicy
 } elseif ($Mode -eq "dry-run" -and $workflowMode -eq "parallel") {
     $output = Invoke-ParallelDryRun $steps $retryPolicy $costTrackingPolicy $memoryPolicy
 } elseif ($Mode -eq "real" -and $workflowMode -eq "parallel") {
-    $output = Invoke-ParallelRealRun $steps $retryPolicy $costTrackingPolicy $memoryPolicy $workflowName $StepRunnerCommand $StepLogDir
+    $output = Invoke-ParallelRealRun $steps $retryPolicy $costTrackingPolicy $memoryPolicy $workflowName $StepRunnerCommand $effectiveStepLogDir
 } else {
     throw "Unsupported workflow mode: $workflowMode"
 }
@@ -1283,8 +1367,10 @@ $resolvedLogOut = Resolve-RepoPath $LogOut $TargetRoot
 $logDir = Split-Path -Parent $resolvedLogOut
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
+$effectiveRunId = if (-not [string]::IsNullOrWhiteSpace($RunId)) { $RunId } else { "workflow-$workflowName-$TaskId" }
+
 $log = [ordered]@{
-    run_id = "20260426-workflow-$workflowName-$TaskId"
+    run_id = $effectiveRunId
     runner = if ($Mode -eq "real") { "workflow-real" } else { "workflow-dry-run" }
     workflow = $workflowName
     task_id = $TaskId
@@ -1297,6 +1383,6 @@ $log = [ordered]@{
     output = $output
 }
 
-$log | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 -Path $resolvedLogOut
+Write-FileRetry -Path $resolvedLogOut -Content ($log | ConvertTo-Json -Depth 8)
 
 Write-Output "Workflow log written to $LogOut"

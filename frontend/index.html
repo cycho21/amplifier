@@ -158,6 +158,49 @@ Validate before save.</textarea>
         </article>
       </dialog>
 
+      <dialog id="execution-modal" class="review-modal" aria-labelledby="execution-modal-title">
+        <article class="review-dialog">
+          <header class="review-header">
+            <div>
+              <p class="eyebrow">Workflow Execution</p>
+              <h2 id="execution-modal-title">Run Task</h2>
+            </div>
+            <button id="execution-modal-close" class="open-button secondary compact" type="button">Close</button>
+          </header>
+          <div id="execution-modal-task-preview" class="execution-modal-task-preview" hidden>
+            <details>
+              <summary class="task-preview-summary">Task spec</summary>
+              <pre id="execution-modal-task-content" class="task-draft-preview"></pre>
+            </details>
+          </div>
+          <form id="execution-modal-form" class="execution-form">
+            <label>
+              <span>Task ID</span>
+              <input name="taskId" type="text" readonly>
+            </label>
+            <label>
+              <span>Workflow Spec</span>
+              <select name="workflowSpec"></select>
+            </label>
+            <label>
+              <span>Mode</span>
+              <select name="mode">
+                <option value="dry-run">dry-run</option>
+                <option value="real">real</option>
+              </select>
+            </label>
+            <label>
+              <span>Step Runner</span>
+              <select name="stepRunnerCommand"></select>
+            </label>
+            <div class="draft-actions">
+              <p id="execution-modal-status" class="muted compact-line" aria-live="polite"></p>
+              <button id="execution-modal-run" class="open-button" type="submit">Run</button>
+            </div>
+          </form>
+        </article>
+      </dialog>
+
       <dialog id="roadmap-review-modal" class="review-modal" aria-labelledby="roadmap-review-title">
         <article class="review-dialog">
           <header class="review-header">
@@ -211,7 +254,7 @@ Validate before save.</textarea>
             <span>Write Scope</span>
             <input name="writeScope" type="text" value="." placeholder="Repo-relative prefixes, comma separated">
           </label>
-          <div class="execution-command">
+<div class="execution-command">
             <span class="metric-label">Command</span>
             <pre id="workflow-command-preview"></pre>
           </div>
@@ -238,6 +281,8 @@ Validate before save.</textarea>
         </summary>
         <div class="roadmap-filter-bar" role="tablist" aria-label="Filter roadmaps by status">
           <button class="filter-tab active" data-filter="active" role="tab" aria-selected="true" type="button">Active</button>
+          <button class="filter-tab" data-filter="in-progress" role="tab" aria-selected="false" type="button">In Progress</button>
+          <button class="filter-tab" data-filter="not-started" role="tab" aria-selected="false" type="button">Not Started</button>
           <button class="filter-tab" data-filter="all" role="tab" aria-selected="false" type="button">All</button>
           <button class="filter-tab" data-filter="completed" role="tab" aria-selected="false" type="button">Completed</button>
         </div>
@@ -249,5 +294,13 @@ Validate before save.</textarea>
     </main>
 
     <script type="module" src="./app.js"></script>
+    <script>
+      const es = new EventSource('/api/watch');
+      es.addEventListener('reload', () => location.reload());
+      es.addEventListener('step', (e) => window.dispatchEvent(new CustomEvent('workflow-step', { detail: JSON.parse(e.data) })));
+      es.addEventListener('workflow-update', () => window.dispatchEvent(new CustomEvent('workflow-update')));
+      es.addEventListener('stdout-chunk', (e) => window.dispatchEvent(new CustomEvent('stdout-chunk', { detail: JSON.parse(e.data) })));
+      es.addEventListener('error', () => setTimeout(() => location.reload(), 1000));
+    </script>
   </body>
 </html>

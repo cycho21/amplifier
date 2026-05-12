@@ -33,6 +33,11 @@ const workflowCommandPreview = document.querySelector('#workflow-command-preview
 const workflowExecutionStatus = document.querySelector('#workflow-execution-status');
 const workflowExecuteButton = document.querySelector('#workflow-execute');
 const executionRequestList = document.querySelector('#execution-request-list');
+const runConsoleBuffers = new Map();
+const executionModal = document.querySelector('#execution-modal');
+const executionModalClose = document.querySelector('#execution-modal-close');
+const executionModalForm = document.querySelector('#execution-modal-form');
+const executionModalStatus = document.querySelector('#execution-modal-status');
 const roadmapReviewModal = document.querySelector('#roadmap-review-modal');
 const roadmapReviewClose = document.querySelector('#roadmap-review-close');
 const roadmapReviewBody = document.querySelector('#roadmap-review-body');
@@ -89,6 +94,8 @@ roadmapDraftForm.addEventListener('submit', createLocalRoadmapDraft);
 workflowExecutionForm.addEventListener('input', handleWorkflowExecutionInput);
 workflowExecutionForm.addEventListener('submit', executeWorkflow);
 roadmapReviewClose.addEventListener('click', () => roadmapReviewModal.close());
+executionModalClose.addEventListener('click', () => executionModal.close());
+executionModalForm.addEventListener('submit', handleExecutionModalSubmit);
 
 document.querySelectorAll('.filter-tab').forEach((tab) => {
   tab.addEventListener('click', () => {
@@ -103,6 +110,18 @@ document.querySelectorAll('.filter-tab').forEach((tab) => {
 initCollapsiblePersistence();
 renderWorkflowCommandPreview();
 loadLocalData();
+
+window.addEventListener('workflow-step', (e) => handleStepEvent(e.detail));
+window.addEventListener('workflow-update', () => loadLocalData());
+window.addEventListener('stdout-chunk', (e) => {
+  const { runId, chunk } = e.detail;
+  runConsoleBuffers.set(runId, (runConsoleBuffers.get(runId) || '') + chunk);
+  const pre = document.getElementById(`console-${CSS.escape(runId)}`);
+  if (pre) {
+    pre.textContent += chunk;
+    pre.scrollTop = pre.scrollHeight;
+  }
+});
 
 function initCollapsiblePersistence() {
   document.querySelectorAll('[data-persist-key]').forEach((el) => {
@@ -400,7 +419,7 @@ function renderWorkflowCommandPreview() {
   const formRequest = readWorkflowExecutionRequest();
   const controlState = createWorkflowControlState(formRequest);
 
-  workflowExecuteButton.textContent = controlState.buttonLabel;
+workflowExecuteButton.textContent = controlState.buttonLabel;
 
   if (!controlState.canExecute) {
     workflowCommandPreview.textContent = '';
@@ -475,8 +494,12 @@ async function executeWorkflow(event) {
       ? `Running... refresh to see result.`
       : `Done: ${result.name}`;
     await loadLocalData();
-    if (result.name) selectRunByFileName(result.name);
-    if (result.pending) startPolling();
+    if (result.pending) {
+      selectRunningByTaskId(result.taskId);
+      startPolling(result.name, result.taskId);
+    } else if (result.name) {
+      selectRunByFileName(result.name);
+    }
   } catch (error) {
     workflowExecutionStatus.textContent = error.message;
   } finally {
@@ -486,29 +509,82 @@ async function executeWorkflow(event) {
 
 let pollingTimer = null;
 
-function startPolling() {
+function startPolling(executionRecordName, taskId = null) {
   if (pollingTimer) return;
+  const runId = executionRecordName?.replace(/^logs\//, '').replace(/\.json$/, '');
   pollingTimer = setInterval(async () => {
     await loadLocalData();
-    const stillRunning = (currentExecutionIndex.runs || []).some((r) => r.state === 'real-running');
+    const thisRun = runId
+      ? (currentExecutionIndex.runs || []).find((r) => r.runId === runId)
+      : null;
+    const stillRunning = thisRun
+      ? thisRun.status === 'running'
+      : (currentExecutionIndex.runs || []).some((r) => r.status === 'running');
     if (!stillRunning) {
       clearInterval(pollingTimer);
       pollingTimer = null;
       workflowExecutionStatus.textContent = 'Execution complete.';
+
+      // Final update to load completed workflow log
+      setTimeout(async () => {
+        await loadLocalData();
+
+        if (executionRecordName) {
+          const record = currentRuns.find((r) => r.fileName === executionRecordName);
+          const logPath = record?.execution?.logPath;
+          if (logPath) selectRunByFileName(logPath);
+        }
+
+        if (taskId && taskId.startsWith('roadmap-')) {
+          const completedRun = currentExecutionIndex.runs.find((r) => r.taskId === taskId);
+          if (completedRun?.status === 'completed') {
+            await autoToggleRoadmapItem(taskId);
+          } else if (completedRun?.status === 'failed') {
+            workflowExecutionStatus.textContent = 'Execution failed — roadmap item not toggled.';
+          }
+        }
+      }, 500);
     }
   }, 3000);
 }
 
 function renderLogSummary(summary) {
-  currentRuns = summary.runs;
+  const indexedRuns = currentExecutionIndex.runs || [];
+  const runningVirtual = indexedRuns
+    .filter((r) => r.status === 'running')
+    .map((r) => ({
+      fileName: '',
+      runId: r.runId,
+      taskId: r.taskId,
+      type: 'workflow',
+      name: r.taskId,
+      status: r.realExecution?.mode === 'real' ? 'real running' : 'running',
+      stepCount: 0,
+      steps: [],
+      nextSteps: [],
+      risks: [],
+      retryAttempts: [],
+      failedSteps: [],
+      cancelledSteps: [],
+      skippedSteps: [],
+      verificationResult: '',
+      verificationEvidence: [],
+      execution: null,
+      cost: { enabled: false, stepCosts: [] },
+      costTotal: null,
+      costTracking: null,
+      memory: { enabled: false }
+    }));
+  const allRuns = [...summary.runs, ...runningVirtual];
+  currentRuns = allRuns;
   renderSummary(summary);
-  renderRunList(summary.runs, summary.emptyMessage);
-  renderExecutionRequestList(summary.runs, currentExecutionIndex.runs || []);
+  renderRunList(allRuns, summary.emptyMessage);
+  renderExecutionRequestList(summary.runs, indexedRuns);
   renderErrors(summary.errors);
 
-  if (summary.runs.length > 0) {
+  if (inspector.hidden && summary.runs.length > 0) {
     selectRun(0);
-  } else {
+  } else if (summary.runs.length === 0) {
     clearInspector();
   }
 }
@@ -523,8 +599,14 @@ function renderRoadmapSummary(summary) {
 function applyRoadmapFilter() {
   const filtered = currentRoadmaps.filter((roadmap) => {
     if (currentRoadmapFilter === 'all') return true;
-    const isCompleted = roadmap.status.toLowerCase().startsWith('completed');
-    return currentRoadmapFilter === 'completed' ? isCompleted : !isCompleted;
+    const s = roadmap.status.toLowerCase();
+    const isCompleted = s.startsWith('completed');
+    const isInProgress = s.startsWith('in progress') || s.startsWith('in-progress');
+    const isNotStarted = !isCompleted && !isInProgress;
+    if (currentRoadmapFilter === 'completed') return isCompleted;
+    if (currentRoadmapFilter === 'in-progress') return isInProgress;
+    if (currentRoadmapFilter === 'not-started') return !isCompleted && !isInProgress;
+    return !isCompleted; // active
   });
   renderRoadmaps(filtered, currentRoadmaps.length === 0 ? 'No roadmaps loaded.' : 'No roadmaps match this filter.');
 }
@@ -603,7 +685,7 @@ function renderRunList(runs, emptyMessage = 'No logs loaded.') {
     for (const { run, index } of entries) {
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = 'run-item';
+      button.className = run.status === 'real running' ? 'run-item running' : 'run-item';
       button.dataset.index = String(index);
       button.addEventListener('click', () => selectRun(index));
 
@@ -627,15 +709,29 @@ function renderRunList(runs, emptyMessage = 'No logs loaded.') {
       const meta = document.createElement('div');
       meta.className = 'run-item-meta';
 
-      const taskSpan = document.createElement('span');
+      const taskSpan = document.createElement('div');
       taskSpan.className = 'run-file';
       taskSpan.textContent = run.taskId !== 'unknown' ? run.taskId : run.fileName;
+      meta.append(taskSpan);
 
-      const timeSpan = document.createElement('span');
+      if (run.status === 'real running' && run.taskId && liveSteps.has(run.taskId)) {
+        const steps = liveSteps.get(run.taskId);
+        const completedCount = steps.filter(s => s.status === 'completed').length;
+        const inProgressStep = steps.find(s => s.status === 'in-progress');
+
+        const stepInfo = document.createElement('div');
+        stepInfo.className = 'run-step-info';
+        stepInfo.textContent = inProgressStep
+          ? `${completedCount}/${steps.length} steps · ${inProgressStep.stepId} running`
+          : `${completedCount}/${steps.length} steps`;
+        meta.append(stepInfo);
+      }
+
+      const timeSpan = document.createElement('div');
       timeSpan.className = 'run-time';
       timeSpan.textContent = formatRunTime(run.fileName);
+      meta.append(timeSpan);
 
-      meta.append(taskSpan, timeSpan);
       button.append(header, meta);
       groupEl.append(button);
     }
@@ -978,9 +1074,26 @@ function renderRoadmapCard(roadmap) {
     row.className = item.done ? 'done' : '';
     const content = document.createElement('div');
     content.className = 'roadmap-item-row';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = item.done;
+    checkbox.addEventListener('change', async () => {
+      checkbox.disabled = true;
+      try {
+        await toggleRoadmapCheckbox(roadmap.fileName, index);
+        await loadLocalData();
+      } catch (error) {
+        renderLoadFailure(error);
+        checkbox.checked = !checkbox.checked;
+      } finally {
+        checkbox.disabled = false;
+      }
+    });
+
     const text = document.createElement('span');
     text.textContent = item.text;
-    content.append(text);
+    content.append(checkbox, text);
 
     if (!item.done) {
       const runButton = document.createElement('button');
@@ -999,6 +1112,37 @@ function renderRoadmapCard(roadmap) {
   return card;
 }
 
+async function toggleRoadmapCheckbox(fileName, itemIndex) {
+  await fetchJson('/api/roadmaps/toggle', {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      targetId: currentTargetId,
+      name: fileName,
+      itemIndex
+    })
+  });
+}
+
+async function autoToggleRoadmapItem(taskId) {
+  const match = taskId.match(/^roadmap-(.+)-(\d+)$/);
+  if (!match) return;
+
+  const roadmapName = match[1];
+  const itemIndex = parseInt(match[2], 10) - 1;
+  const fileName = `docs/plan/roadmaps/${roadmapName}.md`;
+
+  try {
+    await toggleRoadmapCheckbox(fileName, itemIndex);
+    workflowExecutionStatus.textContent = 'Execution complete. Roadmap item checked.';
+    await loadLocalData();
+  } catch (error) {
+    workflowExecutionStatus.textContent = `Auto-toggle failed: ${error.message}`;
+  }
+}
+
 async function runRoadmapItem(fileName, itemIndex, button) {
   button.disabled = true;
 
@@ -1014,9 +1158,8 @@ async function runRoadmapItem(fileName, itemIndex, button) {
         itemIndex
       })
     });
-    prefillWorkflowExecutionFromRoadmapRun(result);
+    await openExecutionModal(result);
     await loadLocalData();
-    await openGeneratedTaskDraft(result);
   } catch (error) {
     renderLoadFailure(error);
   } finally {
@@ -1024,11 +1167,93 @@ async function runRoadmapItem(fileName, itemIndex, button) {
   }
 }
 
+function openExecutionModal(runResult) {
+  const prefill = createWorkflowPrefillFromRoadmapRun(runResult);
+  const opts = currentExecutionOptions;
+
+  executionModalForm.elements.taskId.value = prefill.taskId;
+
+  const workflowSelect = executionModalForm.elements.workflowSpec;
+  workflowSelect.replaceChildren();
+  for (const w of opts.workflows) {
+    const opt = document.createElement('option');
+    opt.value = w;
+    opt.textContent = w;
+    workflowSelect.append(opt);
+  }
+  ensureSelectOption(workflowSelect, prefill.workflowSpec, prefill.workflowSpec);
+  workflowSelect.value = prefill.workflowSpec;
+
+  const runnerSelect = executionModalForm.elements.stepRunnerCommand;
+  runnerSelect.replaceChildren();
+  for (const r of opts.stepRunners) {
+    const opt = document.createElement('option');
+    opt.value = r;
+    opt.textContent = r;
+    runnerSelect.append(opt);
+  }
+  ensureSelectOption(runnerSelect, prefill.stepRunnerCommand, prefill.stepRunnerCommand);
+  runnerSelect.value = prefill.stepRunnerCommand;
+
+  executionModalForm.elements.mode.value = prefill.mode;
+  executionModalStatus.textContent = '';
+  executionModal.dataset.runResult = JSON.stringify(runResult);
+
+  const taskPreview = document.querySelector('#execution-modal-task-preview');
+  const taskContent = document.querySelector('#execution-modal-task-content');
+  taskPreview.hidden = true;
+  taskContent.textContent = '';
+
+  fetchJson(`/api/tasks/read?targetId=${encodeURIComponent(currentTargetId)}&name=${encodeURIComponent(getGeneratedTaskFile(runResult))}`)
+    .then((task) => {
+      taskContent.textContent = task.content;
+      taskPreview.hidden = false;
+    })
+    .catch(() => {});
+
+  executionModal.showModal();
+}
+
+async function handleExecutionModalSubmit(event) {
+  event.preventDefault();
+  const runButton = executionModalForm.querySelector('#execution-modal-run');
+  runButton.disabled = true;
+  executionModalStatus.textContent = 'Starting...';
+
+  try {
+    const prefill = createWorkflowPrefillFromRoadmapRun(JSON.parse(executionModal.dataset.runResult));
+    const request = createWorkflowExecutionRequest({
+      taskId: prefill.taskId,
+      workflowSpec: executionModalForm.elements.workflowSpec.value,
+      mode: executionModalForm.elements.mode.value,
+      stepRunnerCommand: executionModalForm.elements.stepRunnerCommand.value
+    });
+
+    const result = await fetchJson('/api/executions/run', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...request, targetId: currentTargetId, writeScope: ['.'], confirmed: true })
+    });
+
+    executionModal.close();
+    await loadLocalData();
+    if (result.pending) {
+      selectRunningByTaskId(result.taskId);
+      startPolling(result.name, result.taskId);
+    } else if (result.name) {
+      selectRunByFileName(result.name);
+    }
+  } catch (error) {
+    executionModalStatus.textContent = error.message;
+    runButton.disabled = false;
+  }
+}
+
 function prefillWorkflowExecutionFromRoadmapRun(runResult) {
   const prefill = createWorkflowPrefillFromRoadmapRun(runResult);
   prefill.generatedTaskReady = true;
   fillWorkflowExecutionForm(prefill);
-  workflowExecutionStatus.textContent = `Ready to dry-run ${prefill.taskId}.`;
+  workflowExecutionStatus.textContent = `Ready to run ${prefill.taskId}.`;
 }
 
 function fillWorkflowExecutionForm(prefill) {
@@ -1136,6 +1361,11 @@ function renderExecutionRequestList(runs, indexedRuns = []) {
     header.className = 'execution-request-header';
     const title = document.createElement('strong');
     title.textContent = request.taskId;
+    if (request.fileName) {
+      title.className = 'clickable-title';
+      title.title = 'View in inspector';
+      title.addEventListener('click', () => selectRunByFileName(request.fileName));
+    }
     const badge = document.createElement('span');
     badge.className = request.exitCode === 0 || request.state === 'real-completed'
       ? 'verification-badge passed'
@@ -1153,8 +1383,19 @@ function renderExecutionRequestList(runs, indexedRuns = []) {
 
     const actions = document.createElement('div');
     actions.className = 'execution-request-actions';
-    const logState = getWorkflowLogReferenceState(run, runs);
-    actions.append(renderWorkflowLogAction(logState));
+    if (request.state !== 'real-running' && request.state !== 'dry-run-running') {
+      const logState = getWorkflowLogReferenceState(run, runs);
+      actions.append(renderWorkflowLogAction(logState));
+    }
+
+    if (request.state === 'real-running' && request.runId) {
+      const cancelButton = document.createElement('button');
+      cancelButton.type = 'button';
+      cancelButton.className = 'open-button secondary compact';
+      cancelButton.textContent = 'Cancel';
+      cancelButton.addEventListener('click', () => cancelExecutionRequest(request.runId, cancelButton));
+      actions.append(cancelButton);
+    }
 
     if (request.exitCode !== 0 && request.state !== 'real-running' && run) {
       const retryButton = document.createElement('button');
@@ -1165,7 +1406,33 @@ function renderExecutionRequestList(runs, indexedRuns = []) {
       actions.append(retryButton);
     }
 
+    if (request.state !== 'real-running' && request.state !== 'dry-run-running') {
+      const runId = request.runId ||
+        (request.fileName ? request.fileName.replace(/^logs\//, '').replace(/\.json$/, '') : null);
+      if (runId) {
+        const stepsButton = document.createElement('button');
+        stepsButton.type = 'button';
+        stepsButton.className = 'open-button secondary compact';
+        stepsButton.textContent = 'Step logs';
+        stepsButton.addEventListener('click', () => toggleStepLogsPanel(stepsButton, runId, item));
+        actions.append(stepsButton);
+      }
+    }
+
     item.append(header, logLine, command, actions);
+
+    if ((request.state === 'real-running' || request.state === 'dry-run-running') && request.runId) {
+      const panel = document.createElement('div');
+      panel.className = 'console-panel';
+      const pre = document.createElement('pre');
+      pre.id = `console-${CSS.escape(request.runId)}`;
+      pre.className = 'console-output';
+      pre.textContent = runConsoleBuffers.get(request.runId) || '';
+      panel.append(pre);
+      item.append(panel);
+      setTimeout(() => { pre.scrollTop = pre.scrollHeight; }, 0);
+    }
+
     executionRequestList.append(item);
   }
 }
@@ -1186,6 +1453,85 @@ function renderWorkflowLogAction(state) {
   return button;
 }
 
+async function toggleStepLogsPanel(button, runId, container) {
+  const existing = container.querySelector('.step-logs-panel');
+  if (existing) {
+    existing.remove();
+    button.textContent = 'Step logs';
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = 'Loading…';
+
+  const panel = document.createElement('div');
+  panel.className = 'step-logs-panel';
+
+  try {
+    const steps = await fetchJson(`/api/executions/${encodeURIComponent(runId)}/steps`);
+
+    if (steps.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'muted compact-line';
+      empty.textContent = 'No step logs recorded for this run.';
+      panel.append(empty);
+    } else {
+      const list = document.createElement('ul');
+      list.className = 'step-logs-list';
+
+      for (const step of steps) {
+        const li = document.createElement('li');
+        li.className = 'step-log-item';
+
+        const header = document.createElement('div');
+        header.className = 'step-log-header';
+
+        const role = document.createElement('strong');
+        role.textContent = step.role || step.run_id || 'unknown';
+
+        const verif = step.output?.verification_result ?? '';
+        const badge = document.createElement('span');
+        badge.className = verif === 'exit 0' || verif === 0
+          ? 'verification-badge passed'
+          : 'verification-badge';
+        badge.textContent = verif || 'n/a';
+
+        header.append(role, badge);
+
+        const summary = document.createElement('p');
+        summary.className = 'muted compact-line';
+        summary.textContent = step.output?.summary || 'No summary.';
+
+        li.append(header, summary);
+        list.append(li);
+      }
+
+      panel.append(list);
+    }
+  } catch (error) {
+    const errP = document.createElement('p');
+    errP.className = 'muted compact-line';
+    errP.textContent = `Error: ${error.message}`;
+    panel.append(errP);
+  }
+
+  container.append(panel);
+  button.textContent = 'Hide steps';
+  button.disabled = false;
+}
+
+async function cancelExecutionRequest(runId, button) {
+  button.disabled = true;
+
+  try {
+    await fetchJson(`/api/executions/${encodeURIComponent(runId)}`, { method: 'DELETE' });
+    await loadLocalData();
+  } catch (error) {
+    workflowExecutionStatus.textContent = `Cancel failed: ${error.message}`;
+    button.disabled = false;
+  }
+}
+
 function retryExecutionRequest(run) {
   try {
     const prefill = createRetryPrefillFromExecutionRun(run);
@@ -1197,6 +1543,7 @@ function retryExecutionRequest(run) {
 }
 
 function selectRun(index) {
+  currentSelectedIndex = index;
   const run = currentRuns[index];
   if (!run) {
     clearInspector();
@@ -1221,6 +1568,112 @@ function selectRun(index) {
     renderCollapsible('Memory', renderMemoryState(run)),
     renderCollapsible('Risks', renderTextList('', run.risks))
   );
+}
+
+const liveSteps = new Map(); // taskId → step[]
+
+function handleStepEvent(detail) {
+  const { taskId, stepId, status, summary } = detail;
+  console.log('[STEP EVENT]', { taskId, stepId, status, summary });
+  if (!taskId) return;
+
+  if (!liveSteps.has(taskId)) liveSteps.set(taskId, []);
+  const steps = liveSteps.get(taskId);
+  const existing = steps.findIndex((s) => s.stepId === stepId);
+  const step = { stepId, status, summary };
+  if (existing >= 0) steps[existing] = step;
+  else steps.push(step);
+
+  // Update live steps panel if this task is currently selected
+  const selectedRun = currentRuns[currentSelectedIndex];
+  console.log('[STEP EVENT] Selected run:', {
+    currentIndex: currentSelectedIndex,
+    selectedTaskId: selectedRun?.taskId,
+    selectedFileName: selectedRun?.fileName,
+    eventTaskId: taskId,
+    match: selectedRun?.taskId === taskId
+  });
+
+  // Render if the selected run matches this task (regardless of fileName)
+  if (selectedRun?.taskId === taskId) {
+    console.log('[STEP EVENT] Rendering live steps for', taskId);
+    renderLiveSteps(taskId);
+  }
+
+  updateRunningItemStepCount(taskId);
+}
+
+function updateRunningItemStepCount(taskId) {
+  const runIndex = currentRuns.findIndex(r => r.taskId === taskId && r.fileName === '');
+  if (runIndex >= 0) {
+    renderRunList(currentRuns);
+    document.querySelectorAll('.run-item').forEach((item) => {
+      item.classList.toggle('selected', item.dataset.index === String(currentSelectedIndex));
+    });
+  }
+}
+
+function renderLiveSteps(taskId) {
+  const steps = liveSteps.get(taskId) || [];
+  let livePanel = inspector.querySelector('.live-steps-panel');
+
+  if (!livePanel) {
+    livePanel = document.createElement('div');
+    livePanel.className = 'live-steps-panel';
+    const heading = document.createElement('h3');
+    heading.className = 'live-steps-heading';
+    heading.textContent = 'Steps';
+    livePanel.append(heading);
+    inspector.append(livePanel);
+  }
+
+  const list = livePanel.querySelector('.live-steps-list') || document.createElement('ul');
+  list.className = 'live-steps-list';
+
+  if (steps.length === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'live-step-item muted';
+    empty.textContent = 'Waiting for workflow to start...';
+    list.replaceChildren(empty);
+  } else {
+    list.replaceChildren(...steps.map((step) => {
+      const li = document.createElement('li');
+      li.className = 'live-step-item';
+      const badge = document.createElement('span');
+      let badgeClass = 'live-step-badge';
+      if (step.status === 'completed') badgeClass += ' ok';
+      else if (step.status === 'in-progress') badgeClass += ' running';
+      badge.className = badgeClass;
+      badge.textContent = step.status === 'in-progress' ? '⟳' : step.status;
+      const label = document.createElement('strong');
+      label.textContent = step.stepId;
+      const summary = document.createElement('p');
+      summary.className = 'muted compact-line';
+      summary.textContent = step.summary || (step.status === 'in-progress' ? 'Running...' : '');
+      li.append(badge, label, summary);
+      return li;
+    }));
+  }
+
+  if (!livePanel.contains(list)) livePanel.append(list);
+}
+
+let currentSelectedIndex = -1;
+
+function selectRunningByTaskId(taskId) {
+  const index = currentRuns.findIndex((run) => run.fileName === '' && run.taskId === taskId);
+  console.log('[SELECT RUNNING]', { taskId, index, currentRuns: currentRuns.length });
+  if (index >= 0) {
+    selectRun(index);
+    const runsSection = document.querySelector('.runs-section');
+    if (runsSection) {
+      runsSection.open = true;
+      inspector.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    // Always render live steps panel (even if empty initially)
+    if (!liveSteps.has(taskId)) liveSteps.set(taskId, []);
+    renderLiveSteps(taskId);
+  }
 }
 
 function selectRunByFileName(fileName) {

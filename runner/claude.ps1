@@ -6,10 +6,18 @@ param(
     [string]$Plan = "docs/plan/PLAN.md",
     [string]$Contract = "docs/plan/CONTRACT.md",
     [string]$PromptOut = "logs/prompts/claude-$TaskId.prompt.txt",
-    [string]$LogOut = "logs/$(Get-Date -Format 'yyyyMMdd')-claude-$TaskId.json"
+    [string]$LogOut = "logs/$(Get-Date -Format 'yyyyMMdd')-claude-$TaskId.json",
+    [string]$Mode = "dry-run",
+    [switch]$AllowReal
 )
 
 $ErrorActionPreference = "Stop"
+
+# Korean Windows defaults to CP949 which cannot encode emojis or many Unicode
+# characters. Set UTF-8 so piping prompt text to the Claude CLI stdin works
+# correctly regardless of what characters appear in agent/task files.
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+[Console]::InputEncoding  = [System.Text.UTF8Encoding]::new($false)
 
 # Load shared libraries
 . (Join-Path $PSScriptRoot "lib/common.ps1")
@@ -85,6 +93,8 @@ function Build-Prompt {
 
     $prompt = @"
 [System]
+당신은 한국어로 응답하는 AI 엔지니어입니다. 모든 텍스트 출력은 반드시 한국어로 작성해야 합니다.
+
 $RoleText
 
 [Context]
@@ -101,16 +111,28 @@ $TaskText
 $ExecutionText
 
 [Output Format]
-You MUST respond with valid JSON only. No markdown code fences, no explanation.
-Do NOT wrap your response in \`\`\`json blocks.
-Start your response with '{' and end with '}'.
+중요: summary, verification_result, risks, next_steps의 모든 내용을 반드시 한국어로 작성하세요.
+영어로 작성하지 마세요. 오직 한국어만 사용하세요.
+
+JSON 형식으로만 응답하세요. 마크다운 코드 펜스나 설명을 추가하지 마세요.
+\`\`\`json 블록으로 감싸지 마세요.
+응답은 '{'로 시작하고 '}'로 끝나야 합니다.
 
 {
-  "summary": "Brief description of what was done",
-  "changed_files": ["array", "of", "file", "paths"],
-  "verification_result": "How the changes were verified",
-  "risks": ["array", "of", "identified", "risks"],
-  "next_steps": ["array", "of", "next", "actions"]
+  "summary": "수행한 작업에 대한 설명을 한국어로 작성",
+  "changed_files": ["변경된", "파일", "경로"],
+  "verification_result": "검증 방법과 결과를 한국어로 작성",
+  "risks": ["발견된 위험 요소를 한국어로 작성"],
+  "next_steps": ["다음 단계를 한국어로 작성"]
+}
+
+예시 (한국어로만 작성):
+{
+  "summary": "PATCH /api/roadmaps/toggle 엔드포인트 구현 완료 및 검증",
+  "changed_files": ["frontend/server.mjs"],
+  "verification_result": "12개 테스트 케이스 모두 통과 확인",
+  "risks": ["동시성 문제 가능성"],
+  "next_steps": ["UI 체크박스 렌더링 구현"]
 }
 "@
 

@@ -15,7 +15,7 @@ export function createWorkflowPrefillFromRoadmapRun(runResult) {
   return {
     taskId,
     workflowSpec: 'workflows/implementation-review.yaml',
-    mode: 'dry-run',
+    mode: 'real',
     stepRunnerCommand: 'runner/codex.ps1',
     logOut: '',
     writeScope: '.'

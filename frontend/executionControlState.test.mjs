@@ -20,13 +20,12 @@ test('createWorkflowControlState keeps dry-run execution enabled by default', ()
   });
 });
 
-test('createWorkflowControlState blocks real execution until task, scope, and confirmation are present', () => {
+test('createWorkflowControlState blocks real execution until task and scope are ready', () => {
   const blocked = createWorkflowControlState({
     mode: 'real',
     taskId: 'roadmap-NEXT-3',
     writeScope: ['src'],
-    generatedTaskReady: false,
-    realExecutionConfirmation: ''
+    generatedTaskReady: false
   });
 
   assert.equal(blocked.mode, 'real');
@@ -34,7 +33,6 @@ test('createWorkflowControlState blocks real execution until task, scope, and co
   assert.equal(blocked.buttonLabel, 'Run real workflow');
   assert.deepEqual(blocked.requestPayload, {});
   assert.match(blocked.status, /generated task/);
-  assert.match(blocked.status, /RUN REAL/);
 });
 
 test('createWorkflowControlState keeps real execution disabled for partial UI opt-in', () => {
@@ -42,20 +40,12 @@ test('createWorkflowControlState keeps real execution disabled for partial UI op
     {
       generatedTaskReady: false,
       writeScope: ['src'],
-      realExecutionConfirmation: 'RUN REAL',
       expected: /generated task/
     },
     {
       generatedTaskReady: true,
       writeScope: [],
-      realExecutionConfirmation: 'RUN REAL',
       expected: /write scope/
-    },
-    {
-      generatedTaskReady: true,
-      writeScope: ['src'],
-      realExecutionConfirmation: 'RUN_REAL',
-      expected: /RUN REAL/
     }
   ];
 
@@ -72,13 +62,12 @@ test('createWorkflowControlState keeps real execution disabled for partial UI op
   }
 });
 
-test('createWorkflowControlState enables real execution with explicit UI and server confirmations', () => {
+test('createWorkflowControlState enables real execution when task and scope are ready', () => {
   assert.deepEqual(createWorkflowControlState({
     mode: 'real',
     taskId: 'roadmap-NEXT-3',
     writeScope: ['src/app'],
-    generatedTaskReady: true,
-    realExecutionConfirmation: 'RUN REAL'
+    generatedTaskReady: true
   }), {
     mode: 'real',
     canExecute: true,
@@ -86,7 +75,6 @@ test('createWorkflowControlState enables real execution with explicit UI and ser
     buttonLabel: 'Run real workflow',
     requestPayload: {
       allowRealExecution: true,
-      realExecutionConfirmation: 'RUN REAL',
       realExecutionConfirmed: true
     }
   });

@@ -2,7 +2,7 @@ workflow: implementation-review
 
 description: Sequential workflow for designing, implementing, testing, and reviewing a task.
 
-mode: sequential
+mode: parallel
 
 retry:
   max_attempts: 2

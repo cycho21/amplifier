@@ -11,6 +11,20 @@ export function createWorkflowControlState(input = {}) {
     };
   }
 
+  const reasons = [];
+  if (!input.generatedTaskReady) reasons.push('generated task is not ready');
+  if (!hasWriteScope(input.writeScope)) reasons.push('write scope is required');
+
+  if (reasons.length > 0) {
+    return {
+      mode: 'real',
+      canExecute: false,
+      status: reasons.join('; '),
+      buttonLabel: 'Run real workflow',
+      requestPayload: {}
+    };
+  }
+
   return {
     mode,
     canExecute: true,

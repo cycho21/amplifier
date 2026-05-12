@@ -35,6 +35,18 @@ export function startRun(index, run) {
   });
 }
 
+export function cancelRun(index, runId) {
+  const current = createRunIndex(index);
+  const normalizedRunId = normalizeRequired(runId, 'Run id');
+  const runs = current.runs.filter((record) => record.runId !== normalizedRunId);
+
+  if (runs.length === current.runs.length) {
+    throw new Error(`Run not found: ${normalizedRunId}`);
+  }
+
+  return createRunIndex({ runs });
+}
+
 export function finishRun(index, runId, result = {}) {
   const current = createRunIndex(index);
   const normalizedRunId = normalizeRequired(runId, 'Run id');

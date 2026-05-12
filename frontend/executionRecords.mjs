@@ -3,6 +3,7 @@ export function summarizeExecutionRequests(runs, indexedRuns = []) {
     .filter((run) => run.status === 'running')
     .map((run) => ({
       fileName: '',
+      runId: run.runId,
       taskId: run.taskId,
       command: run.command,
       logPath: run.logPath,
@@ -11,8 +12,9 @@ export function summarizeExecutionRequests(runs, indexedRuns = []) {
       state: run.realExecution?.mode === 'real' ? 'real-running' : 'dry-run-running',
       status: run.realExecution?.mode === 'real' ? 'real running' : 'dry-run running'
     }));
+  const runningLogPaths = new Set(runningRequests.map((r) => r.logPath).filter(Boolean));
   const recordRequests = runs
-    .filter((run) => run.execution)
+    .filter((run) => run.execution && !runningLogPaths.has(run.execution.logPath))
     .map((run) => summarizeExecutionRecord(run))
     .reverse();
 
@@ -33,10 +35,11 @@ function summarizeExecutionRecord(run) {
   };
 
   if (run.execution.realMetadata?.mode === 'real') {
+    const pending = run.execution.exitCode === null;
     const completed = run.execution.exitCode === 0;
     request.mode = 'real';
-    request.state = completed ? 'real-completed' : 'real-failed';
-    request.status = completed ? 'real completed' : 'real failed';
+    request.state = pending ? 'real-running' : completed ? 'real-completed' : 'real-failed';
+    request.status = pending ? 'real running' : completed ? 'real completed' : 'real failed';
   }
 
   return request;
